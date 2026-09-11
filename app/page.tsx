@@ -163,7 +163,21 @@ function calculateMatchCourtPenalty(
   const levelTeamA = teamA[0].level + teamA[1].level;
   const levelTeamB = teamB[0].level + teamB[1].level;
   const levelGap = Math.abs(levelTeamA - levelTeamB);
-  penalty += levelGap * 20;
+
+  // Upgrade Logika: Prioritaskan kesetaraan level (maksimal selisih 2 level sesuai updatelogic.txt)
+  // - levelGap <= 2 diperbolehkan dan diprioritaskan
+  // - levelGap > 2 diberikan penalti masif (10.000+) sehingga algoritma tidak akan memilih
+  //   pertandingan timpang walaupun rotasinya baru
+  if (levelGap === 0) {
+    penalty += 0;
+  } else if (levelGap === 1) {
+    penalty += 120;
+  } else if (levelGap === 2) {
+    penalty += 350;
+  } else {
+    // levelGap > 2 (gap 3, 4, dst)
+    penalty += 10000 + (levelGap - 2) * 5000;
+  }
 
   return penalty;
 }
@@ -886,8 +900,19 @@ const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
                   </div>
                 </div>
 
-                <div className="px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-black">
-                  VS
+                <div className="flex flex-col items-center gap-1">
+                  <div className="px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-black">
+                    VS
+                  </div>
+                  <span
+                    className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border ${
+                      projection.court1.levelDiff <= 2
+                        ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                        : "bg-rose-500/10 text-rose-400 border-rose-500/30"
+                    }`}
+                  >
+                    Δ {projection.court1.levelDiff} Lvl {projection.court1.levelDiff <= 2 ? "✓" : "⚠️"}
+                  </span>
                 </div>
 
                 <div className="flex-1 text-center sm:text-right">
@@ -1066,8 +1091,19 @@ const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
                   </div>
                 </div>
 
-                <div className="px-3 py-1 rounded-full bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-black">
-                  VS
+                <div className="flex flex-col items-center gap-1">
+                  <div className="px-3 py-1 rounded-full bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-black">
+                    VS
+                  </div>
+                  <span
+                    className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border ${
+                      projection.court2.levelDiff <= 2
+                        ? "bg-rose-500/10 text-rose-400 border-rose-500/30"
+                        : "bg-amber-500/10 text-amber-400 border-amber-500/30"
+                    }`}
+                  >
+                    Δ {projection.court2.levelDiff} Lvl {projection.court2.levelDiff <= 2 ? "✓" : "⚠️"}
+                  </span>
                 </div>
 
                 <div className="flex-1 text-center sm:text-right">
@@ -1461,6 +1497,27 @@ export default function BadmintonRotationApp() {
     );
   }, []);
 
+  const handleUpdatePlayerName = useCallback((playerId: string, newName: string) => {
+    setPlayers((prev) =>
+      prev.map((p) => (p.id === playerId ? { ...p, name: newName } : p))
+    );
+  }, []);
+
+  // State Status Pembayaran per Pemain (Key: playerId, Value: "QRIS" | "Cash" | "")
+  const [paymentStatuses, setPaymentStatuses] = useState<
+    Record<string, "QRIS" | "Cash" | "">
+  >({});
+
+  const handleUpdatePaymentStatus = useCallback(
+    (playerId: string, status: "QRIS" | "Cash" | "") => {
+      setPaymentStatuses((prev) => ({
+        ...prev,
+        [playerId]: status,
+      }));
+    },
+    []
+  );
+
   const handleAddPlayer = useCallback(
     (e: React.FormEvent) => {
       e.preventDefault();
@@ -1500,6 +1557,7 @@ export default function BadmintonRotationApp() {
       setOverrides({});
       setMatchCourtShuttlecocks({});
       setCustomFees({});
+      setPaymentStatuses({});
     }
   }, []);
 
@@ -1678,14 +1736,28 @@ export default function BadmintonRotationApp() {
     const overrideCount = Object.keys(overrides).length;
     const customFeeCount = Object.keys(customFees).length;
 
+    let qrisPaidCount = 0;
+    let cashPaidCount = 0;
+    for (const p of presentPlayers) {
+      if (!p.isAdmin) {
+        if (paymentStatuses[p.id] === "QRIS") qrisPaidCount++;
+        else if (paymentStatuses[p.id] === "Cash") cashPaidCount++;
+      }
+    }
+    const totalPaidCount = qrisPaidCount + cashPaidCount;
+
     return {
       totalPresent,
       courtStatus,
       activeCourts,
       overrideCount,
       customFeeCount,
+      regularPresent,
+      qrisPaidCount,
+      cashPaidCount,
+      totalPaidCount,
     };
-  }, [presentPlayers, overrides, customFees]);
+  }, [presentPlayers, overrides, customFees, paymentStatuses]);
 
   const selectedProjection = useMemo(() => {
     if (!selectedMatchIdx) return null;
@@ -1840,8 +1912,11 @@ export default function BadmintonRotationApp() {
               <div className="text-xl font-black text-emerald-400 flex items-center gap-2">
                 <span>Rp {totalKas.toLocaleString("id-ID")}</span>
               </div>
-              <div className="text-[11px] text-slate-400 font-mono">
-                {totalSessionShuttlecocks} Cock terpakai ({stats.customFeeCount} diskon)
+              <div className="text-[11px] text-slate-400 font-mono flex items-center gap-2 flex-wrap">
+                <span>{totalSessionShuttlecocks} Cock terpakai</span>
+                <span className="text-emerald-400 font-bold">
+                  · Bayar: {stats.totalPaidCount}/{stats.regularPresent} (📱{stats.qrisPaidCount} QRIS, 💵{stats.cashPaidCount} Cash)
+                </span>
               </div>
             </div>
           </div>
@@ -1870,7 +1945,7 @@ export default function BadmintonRotationApp() {
                 <span>👥 Manajemen Daftar Pemain, Kehadiran &amp; Rincian Biaya</span>
               </h2>
               <span className="text-xs text-slate-400">
-                Ubah level atau biaya manual langsung pada baris pemain di bawah ini.
+                Ubah nama, level atau biaya manual langsung pada baris pemain di bawah ini.
               </span>
             </div>
 
@@ -1940,7 +2015,7 @@ export default function BadmintonRotationApp() {
                   <tr>
                     <th className="py-2.5 px-4 w-16 text-center">Hadir</th>
                     <th className="py-2.5 px-4 w-20 text-center">Urutan</th>
-                    <th className="py-2.5 px-4">Nama Pemain</th>
+                    <th className="py-2.5 px-4 min-w-[200px]">Nama Pemain (Live Edit)</th>
                     <th className="py-2.5 px-4 w-36 text-center">Level (Live Edit)</th>
                     <th className="py-2.5 px-4 w-32 text-center">Main / Cock</th>
                     <th className="py-2.5 px-4 w-40 text-right">Biaya Bayar (Edit)</th>
@@ -1987,11 +2062,22 @@ export default function BadmintonRotationApp() {
                         <td className="py-2 px-4 font-semibold text-white">
                           <div className="flex items-center gap-1.5">
                             {player.isAdmin && (
-                              <span className="px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[10px] font-black">
+                              <span className="px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[10px] font-black shrink-0">
                                 👑 ADMIN
                               </span>
                             )}
-                            <span>{player.name}</span>
+                            <div className="relative flex-1 min-w-[150px]">
+                              <input
+                                type="text"
+                                value={player.name}
+                                onChange={(e) =>
+                                  handleUpdatePlayerName(player.id, e.target.value)
+                                }
+                                className="w-full bg-slate-900/80 hover:bg-slate-900 focus:bg-slate-950 border border-slate-700 hover:border-slate-500 focus:border-emerald-500 rounded-lg px-2.5 py-1 text-xs font-semibold text-white focus:outline-none transition shadow-inner"
+                                placeholder="Nama pemain..."
+                                title="Klik untuk mengedit nama pemain langsung"
+                              />
+                            </div>
                           </div>
                         </td>
                         <td className="py-2 px-4 text-center">
@@ -2125,12 +2211,12 @@ export default function BadmintonRotationApp() {
               <thead>
                 <tr className="bg-slate-950/90 border-b border-slate-800 text-slate-300">
                   {/* Sumbu Y Header: Sticky Left Column */}
-                  <th className="sticky left-0 z-20 bg-slate-950 py-3.5 px-4 min-w-[260px] sm:min-w-[300px] border-r border-slate-800 shadow-md">
+                  <th className="sticky left-0 z-20 bg-slate-950 py-3.5 px-3 min-w-[330px] sm:min-w-[380px] border-r border-slate-800 shadow-md">
                     <div className="text-xs font-black tracking-wider text-slate-400 uppercase">
-                      Profile Pemain, Level &amp; Biaya (Sumbu Y)
+                      Pemain, Level, Bayar &amp; Biaya (Sumbu Y)
                     </div>
                     <div className="text-[10px] text-slate-400 font-normal mt-0.5">
-                      Urutan Hadir Duluan di Atas · Level &amp; Biaya dapat diubah langsung
+                      Nama &amp; Level live edit · Status: QRIS / Cash / Kosong
                     </div>
                   </th>
 
@@ -2239,8 +2325,8 @@ export default function BadmintonRotationApp() {
                         }`}
                       >
                         {/* Kolom Sticky Pemain (Sumbu Y) */}
-                        <td className="sticky left-0 z-10 bg-slate-900 py-2 px-4 border-r border-slate-800 flex items-center justify-between gap-3 shadow-md">
-                          <div className="flex items-center gap-2.5 overflow-hidden">
+                        <td className="sticky left-0 z-10 bg-slate-900 py-2 px-3 border-r border-slate-800 flex items-center justify-between gap-2 shadow-md">
+                          <div className="flex items-center gap-2 overflow-hidden">
                             <span
                               className={`w-5 h-5 rounded-full text-[10px] font-mono flex items-center justify-center font-bold shrink-0 ${
                                 player.isAdmin
@@ -2251,9 +2337,22 @@ export default function BadmintonRotationApp() {
                               #{player.arrivalOrder}
                             </span>
                             <div className="truncate">
-                              <div className="text-xs font-bold text-white truncate max-w-[120px] sm:max-w-[150px] flex items-center gap-1">
-                                {player.isAdmin && <span className="text-purple-400">👑</span>}
-                                <span>{player.name}</span>
+                              <div className="flex items-center gap-1">
+                                {player.isAdmin && (
+                                  <span className="text-purple-400 shrink-0 text-xs" title="Admin / Host">
+                                    👑
+                                  </span>
+                                )}
+                                <input
+                                  type="text"
+                                  value={player.name}
+                                  onChange={(e) =>
+                                    handleUpdatePlayerName(player.id, e.target.value)
+                                  }
+                                  className="bg-slate-950/40 hover:bg-slate-950/80 focus:bg-slate-950 border border-transparent hover:border-slate-700 focus:border-emerald-500 rounded px-1.5 py-0.5 text-xs font-bold text-white focus:outline-none transition w-[110px] sm:w-[135px] truncate"
+                                  title="Klik untuk langsung mengubah nama pemain di sini"
+                                  placeholder="Nama pemain..."
+                                />
                               </div>
                               {/* Rincian Biaya per Profile */}
                               <div className="flex items-center gap-1.5 mt-0.5">
@@ -2291,6 +2390,41 @@ export default function BadmintonRotationApp() {
                           </div>
 
                           <div className="flex items-center gap-1.5 shrink-0">
+                            {/* Status Pembayaran Dropdown (QRIS / Cash / Belum) */}
+                            {player.isAdmin ? (
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-500/10 text-purple-300 border border-purple-500/20 font-mono">
+                                Host
+                              </span>
+                            ) : (
+                              <select
+                                value={paymentStatuses[player.id] || ""}
+                                onChange={(e) =>
+                                  handleUpdatePaymentStatus(
+                                    player.id,
+                                    e.target.value as "QRIS" | "Cash" | ""
+                                  )
+                                }
+                                className={`px-1.5 py-0.5 rounded text-[10px] font-black font-mono border focus:outline-none cursor-pointer transition ${
+                                  paymentStatuses[player.id] === "QRIS"
+                                    ? "bg-sky-500/20 text-sky-300 border-sky-500/50 hover:bg-sky-500/30"
+                                    : paymentStatuses[player.id] === "Cash"
+                                    ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/50 hover:bg-emerald-500/30"
+                                    : "bg-slate-950/60 text-slate-400 border-slate-800 hover:border-slate-700"
+                                }`}
+                                title="Status Pembayaran: QRIS, Cash, atau Kosong (Belum Bayar)"
+                              >
+                                <option value="" className="bg-slate-900 text-slate-400 font-normal">
+                                  - Belum -
+                                </option>
+                                <option value="QRIS" className="bg-slate-900 text-sky-400 font-bold">
+                                  QRIS
+                                </option>
+                                <option value="Cash" className="bg-slate-900 text-emerald-400 font-bold">
+                                  Cash
+                                </option>
+                              </select>
+                            )}
+
                             {/* Live Level Editor Dropdown */}
                             <select
                               value={player.level}

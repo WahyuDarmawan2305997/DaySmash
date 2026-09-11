@@ -1,0 +1,7 @@
+perbaiki logic tanpa merusak logika sebelumnya!
+logic disini diperuntukan untuk pengupgrade logic yang sudah ada
+bukan merusaknya. dari yang saya dapatkan, banyak match yang levelnya terlalu berbeda jauh
+memanga sebelumnya dikatakan bahwa rotasi pemain lebih penting dari kesempurnaan level, tapi sekarang kita atur batasannya.
+level antar tim tidak boleh terlalu jauh berbeda, maksimal hanya berbeda 2 level.
+kalau ada situasi dimana tim memiliki perbedaan level yang jauh (lebih dari 2) tapi rotasinya benar benar baru, atau ada 3 orang yang sama tapi levelnya bisa hampir sama bahkan persis sama, maka lebih prioritaskan level yang sama, tinggal rotasi antara partner dan musuh.
+intinya adalah upgrade logic agar lebih memprioritaskan lagi kesetaraan level. tanpa merubah banyak logic yang sebelumnya sudah benar.
