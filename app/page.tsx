@@ -36,7 +36,7 @@ export interface DoublesTeam {
  * Pertandingan di 1 Lapangan (Court)
  */
 export interface CourtMatch {
-  courtNumber: 1 | 2;
+  courtNumber: number; // 1, 2, 3, 4, 5
   teamA: DoublesTeam;
   teamB: DoublesTeam;
   teamALevel: number;
@@ -49,12 +49,16 @@ export interface CourtMatch {
  */
 export interface MatchProjection {
   matchIndex: number; // 1-indexed (M1, M2, dst)
+  courts: (CourtMatch | null)[]; // Seluruh lapangan yang aktif (1 sampai 5)
   court1: CourtMatch | null;
   court2: CourtMatch | null;
+  court3?: CourtMatch | null;
+  court4?: CourtMatch | null;
+  court5?: CourtMatch | null;
   playingPlayerIds: Set<string>;
   waitingPlayerIds: string[];
   isOverridden: boolean;
-  playerCourts: Record<string, "c1" | "c2" | null>;
+  playerCourts: Record<string, string | null>; // "c1" | "c2" | "c3" | "c4" | "c5" | null
   // Snapshot statistik pada match ini untuk keperluan audit/UI
   waitCountsSnapshot: Record<string, number>;
   matchesPlayedSnapshot: Record<string, number>;
@@ -64,51 +68,142 @@ export interface MatchProjection {
  * Data Override Manual oleh User
  */
 export interface MatchOverride {
-  court1: {
-    teamA: [string, string];
-    teamB: [string, string];
-  } | null;
-  court2: {
-    teamA: [string, string];
-    teamB: [string, string];
-  } | null;
+  courts?: Record<number, { teamA: [string, string]; teamB: [string, string] } | null>;
+  court1?: { teamA: [string, string]; teamB: [string, string] } | null;
+  court2?: { teamA: [string, string]; teamB: [string, string] } | null;
+  court3?: { teamA: [string, string]; teamB: [string, string] } | null;
+  court4?: { teamA: [string, string]; teamB: [string, string] } | null;
+  court5?: { teamA: [string, string]; teamB: [string, string] } | null;
 }
 
 /**
- * Data Shuttlecock per Lapangan pada tiap Match
+ * Data Shuttlecock per Lapangan pada tiap Match (misal: court1: 2, court2: 1, ...)
  */
-export interface CourtShuttlecockData {
-  court1: number;
-  court2: number;
-}
+export type CourtShuttlecockData = Record<string, number>;
+
+/**
+ * Konfigurasi Tema Warna & Identitas Lapangan (C1 - C5)
+ */
+export const COURT_THEMES: Record<
+  number,
+  {
+    name: string;
+    key: string;
+    code: string;
+    badgeClass: string;
+    borderClass: string;
+    textClass: string;
+    bgHeaderClass: string;
+    bgSubtleClass: string;
+    accentBg: string;
+    accentHover: string;
+    accentText: string;
+  }
+> = {
+  1: {
+    name: "Lapangan 1",
+    key: "court1",
+    code: "c1",
+    badgeClass: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-emerald-950/40",
+    borderClass: "border-emerald-500/30",
+    textClass: "text-emerald-400",
+    bgHeaderClass: "bg-emerald-500/20 text-emerald-400",
+    bgSubtleClass: "bg-emerald-950/50 border-emerald-500/30",
+    accentBg: "bg-emerald-500",
+    accentHover: "hover:bg-emerald-400",
+    accentText: "text-slate-950",
+  },
+  2: {
+    name: "Lapangan 2",
+    key: "court2",
+    code: "c2",
+    badgeClass: "bg-rose-500/20 text-rose-300 border-rose-500/40 shadow-rose-950/40",
+    borderClass: "border-rose-500/30",
+    textClass: "text-rose-400",
+    bgHeaderClass: "bg-rose-500/20 text-rose-400",
+    bgSubtleClass: "bg-rose-950/50 border-rose-500/30",
+    accentBg: "bg-rose-500",
+    accentHover: "hover:bg-rose-400",
+    accentText: "text-slate-950",
+  },
+  3: {
+    name: "Lapangan 3",
+    key: "court3",
+    code: "c3",
+    badgeClass: "bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-amber-950/40",
+    borderClass: "border-amber-500/30",
+    textClass: "text-amber-400",
+    bgHeaderClass: "bg-amber-500/20 text-amber-400",
+    bgSubtleClass: "bg-amber-950/50 border-amber-500/30",
+    accentBg: "bg-amber-500",
+    accentHover: "hover:bg-amber-400",
+    accentText: "text-slate-950",
+  },
+  4: {
+    name: "Lapangan 4",
+    key: "court4",
+    code: "c4",
+    badgeClass: "bg-sky-500/20 text-sky-300 border-sky-500/40 shadow-sky-950/40",
+    borderClass: "border-sky-500/30",
+    textClass: "text-sky-400",
+    bgHeaderClass: "bg-sky-500/20 text-sky-400",
+    bgSubtleClass: "bg-sky-950/50 border-sky-500/30",
+    accentBg: "bg-sky-500",
+    accentHover: "hover:bg-sky-400",
+    accentText: "text-slate-950",
+  },
+  5: {
+    name: "Lapangan 5",
+    key: "court5",
+    code: "c5",
+    badgeClass: "bg-purple-500/20 text-purple-300 border-purple-500/40 shadow-purple-950/40",
+    borderClass: "border-purple-500/30",
+    textClass: "text-purple-400",
+    bgHeaderClass: "bg-purple-500/20 text-purple-400",
+    bgSubtleClass: "bg-purple-950/50 border-purple-500/30",
+    accentBg: "bg-purple-500",
+    accentHover: "hover:bg-purple-400",
+    accentText: "text-slate-950",
+  },
+};
 
 // ============================================================================
-// 2. DATA AWAL CONTOH (TERMASUK PEMAIN SPESIAL ADMIN / HOST)
+// 2. DATA AWAL CONTOH (NAMA PEMAIN A, B, C, D... BESERTA ADMIN / HOST)
 // ============================================================================
 
-const INITIAL_PLAYERS: Player[] = [
+export const INITIAL_PLAYERS: Player[] = [
   // Pemain Spesial (Admin / Host / User itu sendiri)
   {
     id: "admin",
-    name: "User (Admin / Host)",
+    name: "Admin (Host)",
     level: 3,
     isPresent: true,
     arrivalOrder: 1,
     isAdmin: true,
   },
-  // Daftar Pemain Reguler
-  { id: "p1", name: "Hendra Setiawan", level: 5, isPresent: true, arrivalOrder: 2 },
-  { id: "p2", name: "Mohammad Ahsan", level: 5, isPresent: true, arrivalOrder: 3 },
-  { id: "p3", name: "Kevin Sanjaya", level: 5, isPresent: true, arrivalOrder: 4 },
-  { id: "p4", name: "Marcus Gideon", level: 4, isPresent: true, arrivalOrder: 5 },
-  { id: "p5", name: "Fajar Alfian", level: 4, isPresent: true, arrivalOrder: 6 },
-  { id: "p6", name: "M. Rian Ardianto", level: 4, isPresent: true, arrivalOrder: 7 },
-  { id: "p7", name: "Anthony Ginting", level: 4, isPresent: true, arrivalOrder: 8 },
-  { id: "p8", name: "Jonatan Christie", level: 4, isPresent: true, arrivalOrder: 9 },
-  { id: "p9", name: "Bagas Maulana", level: 3, isPresent: true, arrivalOrder: 10 },
-  { id: "p10", name: "M. Shohibul Fikri", level: 3, isPresent: true, arrivalOrder: 11 },
-  { id: "p11", name: "Leo Rolly Carnando", level: 3, isPresent: false, arrivalOrder: 0 },
-  { id: "p12", name: "Daniel Marthin", level: 2, isPresent: false, arrivalOrder: 0 },
+  // Daftar Pemain Reguler (A, B, C, D... hingga 22 pemain untuk mencukupi hingga 5 lapangan)
+  { id: "p1", name: "A", level: 5, isPresent: true, arrivalOrder: 2 },
+  { id: "p2", name: "B", level: 5, isPresent: true, arrivalOrder: 3 },
+  { id: "p3", name: "C", level: 5, isPresent: true, arrivalOrder: 4 },
+  { id: "p4", name: "D", level: 5, isPresent: true, arrivalOrder: 5 },
+  { id: "p5", name: "E", level: 4, isPresent: true, arrivalOrder: 6 },
+  { id: "p6", name: "F", level: 4, isPresent: true, arrivalOrder: 7 },
+  { id: "p7", name: "G", level: 4, isPresent: true, arrivalOrder: 8 },
+  { id: "p8", name: "H", level: 4, isPresent: true, arrivalOrder: 9 },
+  { id: "p9", name: "I", level: 4, isPresent: true, arrivalOrder: 10 },
+  { id: "p10", name: "J", level: 4, isPresent: true, arrivalOrder: 11 },
+  { id: "p11", name: "K", level: 3, isPresent: true, arrivalOrder: 12 },
+  { id: "p12", name: "L", level: 3, isPresent: true, arrivalOrder: 13 },
+  { id: "p13", name: "M", level: 3, isPresent: true, arrivalOrder: 14 },
+  { id: "p14", name: "N", level: 3, isPresent: true, arrivalOrder: 15 },
+  { id: "p15", name: "O", level: 3, isPresent: true, arrivalOrder: 16 },
+  { id: "p16", name: "P", level: 3, isPresent: true, arrivalOrder: 17 },
+  { id: "p17", name: "Q", level: 2, isPresent: true, arrivalOrder: 18 },
+  { id: "p18", name: "R", level: 2, isPresent: true, arrivalOrder: 19 },
+  { id: "p19", name: "S", level: 2, isPresent: true, arrivalOrder: 20 },
+  { id: "p20", name: "T", level: 2, isPresent: true, arrivalOrder: 21 },
+  { id: "p21", name: "U", level: 1, isPresent: true, arrivalOrder: 22 },
+  { id: "p22", name: "V", level: 1, isPresent: true, arrivalOrder: 23 },
 ];
 
 // ============================================================================
@@ -278,8 +373,102 @@ function optimizeTwoCourtPairings(
 }
 
 /**
+ * Optimasi Pengelompokan & Pasangan untuk 3, 4, atau 5 Lapangan (Multi-Court)
+ * 
+ * Strategi:
+ * 1. Urutkan pemain berdasarkan level descending (5 -> 1) lalu partisi awal per jenjang (tiering),
+ *    menjamin pasangan dan lawan pada setiap lapangan memiliki tingkat kemampuan setara (levelGap <= 2).
+ * 2. Lakukan optimasi pertukaran lokal (2-opt swap) antar lapangan untuk mencari kombinasi
+ *    rotasi partner & musuh paling segar tanpa merusak kesetaraan level.
+ */
+function optimizeMultiCourtPairings(
+  selectedPlayers: Player[],
+  courtCount: number,
+  currentMatchIndex: number,
+  partnerHistory: Map<string, Map<string, number[]>>,
+  opponentHistory: Map<string, Map<string, number[]>>
+): Array<{ teamA: [Player, Player]; teamB: [Player, Player] }> {
+  const sorted = [...selectedPlayers].sort((a, b) => b.level - a.level);
+
+  // Inisialisasi awal berjenjang: Court 0 dapat 4 teratas, Court 1 dapat 4 berikutnya, dst.
+  const courtGroups: Player[][] = [];
+  for (let c = 0; c < courtCount; c++) {
+    courtGroups.push(sorted.slice(c * 4, c * 4 + 4));
+  }
+
+  let bestCourts = courtGroups;
+  let bestCourtOpt = bestCourts.map((group) =>
+    optimizeCourtPairing(
+      group as [Player, Player, Player, Player],
+      currentMatchIndex,
+      partnerHistory,
+      opponentHistory
+    )
+  );
+  let bestTotalPenalty = bestCourtOpt.reduce((sum, c) => sum + c.penalty, 0);
+
+  // 2-opt swaps antar lapangan
+  let improved = true;
+  let iterations = 0;
+  while (improved && iterations < 8) {
+    improved = false;
+    iterations++;
+
+    for (let cA = 0; cA < courtCount; cA++) {
+      for (let cB = cA + 1; cB < courtCount; cB++) {
+        for (let pAIdx = 0; pAIdx < 4; pAIdx++) {
+          for (let pBIdx = 0; pBIdx < 4; pBIdx++) {
+            const playerA = bestCourts[cA][pAIdx];
+            const playerB = bestCourts[cB][pBIdx];
+
+            // Hanya pertimbangkan tukar jika selisih level pemain <= 1
+            if (Math.abs(playerA.level - playerB.level) > 1) continue;
+
+            const newCourtA = [...bestCourts[cA]];
+            newCourtA[pAIdx] = playerB;
+            const newCourtB = [...bestCourts[cB]];
+            newCourtB[pBIdx] = playerA;
+
+            const optA = optimizeCourtPairing(
+              newCourtA as [Player, Player, Player, Player],
+              currentMatchIndex,
+              partnerHistory,
+              opponentHistory
+            );
+            const optB = optimizeCourtPairing(
+              newCourtB as [Player, Player, Player, Player],
+              currentMatchIndex,
+              partnerHistory,
+              opponentHistory
+            );
+
+            const oldScore = bestCourtOpt[cA].penalty + bestCourtOpt[cB].penalty;
+            const newScore = optA.penalty + optB.penalty;
+
+            if (newScore < oldScore - 1) {
+              bestCourts[cA] = newCourtA;
+              bestCourts[cB] = newCourtB;
+              bestCourtOpt[cA] = optA;
+              bestCourtOpt[cB] = optB;
+              bestTotalPenalty = bestTotalPenalty - oldScore + newScore;
+              improved = true;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return bestCourtOpt.map((opt) => ({
+    teamA: opt.teamA,
+    teamB: opt.teamB,
+  }));
+}
+
+/**
  * ENGINE SIMULASI UTAMA
  * 
+ * Mendukung 1 hingga 5 lapangan secara dinamis.
  * Aturan Khusus Pemain Spesial (Admin):
  * 1. Admin TIDAK ikut seleksi otomatis (hanya bermain jika dimasukkan manual lewat override).
  * 2. Jika dimasukkan manual di match M, Admin bermain, riwayat partner & lawan Admin
@@ -290,7 +479,8 @@ function optimizeTwoCourtPairings(
 export function generateMatchProjections(
   allPlayers: Player[],
   projectionCount: number,
-  overrides: Record<number, MatchOverride>
+  overrides: Record<number, MatchOverride>,
+  courtCount: number = 2
 ): MatchProjection[] {
   const activePlayers = allPlayers
     .filter((p) => p.isPresent)
@@ -340,11 +530,8 @@ export function generateMatchProjections(
 
   for (let m = 1; m <= projectionCount; m++) {
     const isOverridden = Boolean(overrides[m]);
-    let court1Match: CourtMatch | null = null;
-    let court2Match: CourtMatch | null = null;
     const playingIds = new Set<string>();
-
-    const playerCount = activePlayers.length;
+    const courtMatches: (CourtMatch | null)[] = [];
 
     const waitCountsSnapshot: Record<string, number> = {};
     const matchesPlayedSnapshot: Record<string, number> = {};
@@ -353,69 +540,71 @@ export function generateMatchProjections(
       matchesPlayedSnapshot[p.id] = currentMatchesPlayed.get(p.id) || 0;
     }
 
-    // KASUS A: MATCH INI DIOVERRIDE SECARA MANUAL OLEH USER (Admin bisa dipilih di sini)
-    if (isOverridden) {
-      const overrideData = overrides[m];
-      if (overrideData.court1) {
-        const [a1, a2] = overrideData.court1.teamA;
-        const [b1, b2] = overrideData.court1.teamB;
-        const pA1 = playerMap.get(a1);
-        const pA2 = playerMap.get(a2);
-        const pB1 = playerMap.get(b1);
-        const pB2 = playerMap.get(b2);
+    // Helper pembaca override per nomor lapangan
+    const getOverrideForCourt = (c: number) => {
+      const ov = overrides[m];
+      if (!ov) return null;
+      if (ov.courts && ov.courts[c] !== undefined) return ov.courts[c];
+      if (c === 1 && ov.court1) return ov.court1;
+      if (c === 2 && ov.court2) return ov.court2;
+      if (c === 3 && ov.court3) return ov.court3;
+      if (c === 4 && ov.court4) return ov.court4;
+      if (c === 5 && ov.court5) return ov.court5;
+      return null;
+    };
 
-        if (pA1 && pA2 && pB1 && pB2) {
-          const teamALvl = pA1.level + pA2.level;
-          const teamBLvl = pB1.level + pB2.level;
-          court1Match = {
-            courtNumber: 1,
-            teamA: { player1Id: a1, player2Id: a2 },
-            teamB: { player1Id: b1, player2Id: b2 },
-            teamALevel: teamALvl,
-            teamBLevel: teamBLvl,
-            levelDiff: Math.abs(teamALvl - teamBLvl),
-          };
-          playingIds.add(a1);
-          playingIds.add(a2);
-          playingIds.add(b1);
-          playingIds.add(b2);
-        }
+    let hasAnyOverride = false;
+    for (let c = 1; c <= courtCount; c++) {
+      if (getOverrideForCourt(c)) {
+        hasAnyOverride = true;
+        break;
       }
+    }
 
-      if (overrideData.court2) {
-        const [a1, a2] = overrideData.court2.teamA;
-        const [b1, b2] = overrideData.court2.teamB;
-        const pA1 = playerMap.get(a1);
-        const pA2 = playerMap.get(a2);
-        const pB1 = playerMap.get(b1);
-        const pB2 = playerMap.get(b2);
+    // KASUS A: MATCH INI DIOVERRIDE SECARA MANUAL OLEH USER
+    if (isOverridden && hasAnyOverride) {
+      for (let c = 1; c <= courtCount; c++) {
+        const cOv = getOverrideForCourt(c);
+        if (cOv) {
+          const [a1, a2] = cOv.teamA;
+          const [b1, b2] = cOv.teamB;
+          const pA1 = playerMap.get(a1);
+          const pA2 = playerMap.get(a2);
+          const pB1 = playerMap.get(b1);
+          const pB2 = playerMap.get(b2);
 
-        if (pA1 && pA2 && pB1 && pB2) {
-          const teamALvl = pA1.level + pA2.level;
-          const teamBLvl = pB1.level + pB2.level;
-          court2Match = {
-            courtNumber: 2,
-            teamA: { player1Id: a1, player2Id: a2 },
-            teamB: { player1Id: b1, player2Id: b2 },
-            teamALevel: teamALvl,
-            teamBLevel: teamBLvl,
-            levelDiff: Math.abs(teamALvl - teamBLvl),
-          };
-          playingIds.add(a1);
-          playingIds.add(a2);
-          playingIds.add(b1);
-          playingIds.add(b2);
+          if (pA1 && pA2 && pB1 && pB2) {
+            const teamALvl = pA1.level + pA2.level;
+            const teamBLvl = pB1.level + pB2.level;
+            courtMatches.push({
+              courtNumber: c,
+              teamA: { player1Id: a1, player2Id: a2 },
+              teamB: { player1Id: b1, player2Id: b2 },
+              teamALevel: teamALvl,
+              teamBLevel: teamBLvl,
+              levelDiff: Math.abs(teamALvl - teamBLvl),
+            });
+            playingIds.add(a1);
+            playingIds.add(a2);
+            playingIds.add(b1);
+            playingIds.add(b2);
+            continue;
+          }
         }
+        courtMatches.push(null);
       }
     } else {
       // KASUS B: GENERATE OTOMATIS
       // Pemain reguler yang eligible (Admin TIDAK ikut draft otomatis)
       const autoEligiblePlayers = activePlayers.filter((p) => !p.isAdmin);
       const eligibleCount = autoEligiblePlayers.length;
+      const maxCourtsPossible = Math.floor(eligibleCount / 4);
+      const courtsToRun = Math.min(courtCount, maxCourtsPossible);
 
-      if (eligibleCount < 4) {
+      if (courtsToRun === 0) {
         results.push({
           matchIndex: m,
+          courts: Array(courtCount).fill(null),
           court1: null,
           court2: null,
           playingPlayerIds: new Set(),
@@ -428,7 +617,7 @@ export function generateMatchProjections(
         continue;
       }
 
-      const slotsNeeded = eligibleCount >= 8 ? 8 : 4;
+      const slotsNeeded = courtsToRun * 4;
 
       const scoredPlayers = autoEligiblePlayers.map((p) => {
         const wait = currentWaitCount.get(p.id) || 0;
@@ -455,7 +644,7 @@ export function generateMatchProjections(
 
       selectedPlayers.forEach((p) => playingIds.add(p.id));
 
-      if (slotsNeeded === 4) {
+      if (courtsToRun === 1) {
         const opt = optimizeCourtPairing(
           selectedPlayers as [Player, Player, Player, Player],
           m,
@@ -466,15 +655,18 @@ export function generateMatchProjections(
         const teamALvl = opt.teamA[0].level + opt.teamA[1].level;
         const teamBLvl = opt.teamB[0].level + opt.teamB[1].level;
 
-        court1Match = {
+        courtMatches.push({
           courtNumber: 1,
           teamA: { player1Id: opt.teamA[0].id, player2Id: opt.teamA[1].id },
           teamB: { player1Id: opt.teamB[0].id, player2Id: opt.teamB[1].id },
           teamALevel: teamALvl,
           teamBLevel: teamBLvl,
           levelDiff: Math.abs(teamALvl - teamBLvl),
-        };
-      } else {
+        });
+        for (let c = 2; c <= courtCount; c++) {
+          courtMatches.push(null);
+        }
+      } else if (courtsToRun === 2) {
         const opt = optimizeTwoCourtPairings(
           selectedPlayers,
           m,
@@ -488,57 +680,75 @@ export function generateMatchProjections(
         const c2ALvl = opt.court2.teamA[0].level + opt.court2.teamA[1].level;
         const c2BLvl = opt.court2.teamB[0].level + opt.court2.teamB[1].level;
 
-        court1Match = {
+        courtMatches.push({
           courtNumber: 1,
           teamA: { player1Id: opt.court1.teamA[0].id, player2Id: opt.court1.teamA[1].id },
           teamB: { player1Id: opt.court1.teamB[0].id, player2Id: opt.court1.teamB[1].id },
           teamALevel: c1ALvl,
           teamBLevel: c1BLvl,
           levelDiff: Math.abs(c1ALvl - c1BLvl),
-        };
+        });
 
-        court2Match = {
+        courtMatches.push({
           courtNumber: 2,
           teamA: { player1Id: opt.court2.teamA[0].id, player2Id: opt.court2.teamA[1].id },
           teamB: { player1Id: opt.court2.teamB[0].id, player2Id: opt.court2.teamB[1].id },
           teamALevel: c2ALvl,
           teamBLevel: c2BLvl,
           levelDiff: Math.abs(c2ALvl - c2BLvl),
-        };
+        });
+        for (let c = 3; c <= courtCount; c++) {
+          courtMatches.push(null);
+        }
+      } else {
+        // courtsToRun >= 3 (3, 4, atau 5 lapangan)
+        const multiOpts = optimizeMultiCourtPairings(
+          selectedPlayers,
+          courtsToRun,
+          m,
+          partnerHistory,
+          opponentHistory
+        );
+
+        for (let i = 0; i < courtsToRun; i++) {
+          const opt = multiOpts[i];
+          const tALvl = opt.teamA[0].level + opt.teamA[1].level;
+          const tBLvl = opt.teamB[0].level + opt.teamB[1].level;
+
+          courtMatches.push({
+            courtNumber: i + 1,
+            teamA: { player1Id: opt.teamA[0].id, player2Id: opt.teamA[1].id },
+            teamB: { player1Id: opt.teamB[0].id, player2Id: opt.teamB[1].id },
+            teamALevel: tALvl,
+            teamBLevel: tBLvl,
+            levelDiff: Math.abs(tALvl - tBLvl),
+          });
+        }
+        for (let c = courtsToRun + 1; c <= courtCount; c++) {
+          courtMatches.push(null);
+        }
       }
     }
 
-    const playerCourts: Record<string, "c1" | "c2" | null> = {};
+    const playerCourts: Record<string, string | null> = {};
 
-    if (court1Match) {
-      playerCourts[court1Match.teamA.player1Id] = "c1";
-      playerCourts[court1Match.teamA.player2Id] = "c1";
-      playerCourts[court1Match.teamB.player1Id] = "c1";
-      playerCourts[court1Match.teamB.player2Id] = "c1";
+    courtMatches.forEach((courtMatch) => {
+      if (courtMatch) {
+        const cCode = `c${courtMatch.courtNumber}`;
+        playerCourts[courtMatch.teamA.player1Id] = cCode;
+        playerCourts[courtMatch.teamA.player2Id] = cCode;
+        playerCourts[courtMatch.teamB.player1Id] = cCode;
+        playerCourts[courtMatch.teamB.player2Id] = cCode;
 
-      helperRecordPartnership(court1Match.teamA.player1Id, court1Match.teamA.player2Id, m);
-      helperRecordPartnership(court1Match.teamB.player1Id, court1Match.teamB.player2Id, m);
-      helperRecordOpponents(
-        [court1Match.teamA.player1Id, court1Match.teamA.player2Id],
-        [court1Match.teamB.player1Id, court1Match.teamB.player2Id],
-        m
-      );
-    }
-
-    if (court2Match) {
-      playerCourts[court2Match.teamA.player1Id] = "c2";
-      playerCourts[court2Match.teamA.player2Id] = "c2";
-      playerCourts[court2Match.teamB.player1Id] = "c2";
-      playerCourts[court2Match.teamB.player2Id] = "c2";
-
-      helperRecordPartnership(court2Match.teamA.player1Id, court2Match.teamA.player2Id, m);
-      helperRecordPartnership(court2Match.teamB.player1Id, court2Match.teamB.player2Id, m);
-      helperRecordOpponents(
-        [court2Match.teamA.player1Id, court2Match.teamA.player2Id],
-        [court2Match.teamB.player1Id, court2Match.teamB.player2Id],
-        m
-      );
-    }
+        helperRecordPartnership(courtMatch.teamA.player1Id, courtMatch.teamA.player2Id, m);
+        helperRecordPartnership(courtMatch.teamB.player1Id, courtMatch.teamB.player2Id, m);
+        helperRecordOpponents(
+          [courtMatch.teamA.player1Id, courtMatch.teamA.player2Id],
+          [courtMatch.teamB.player1Id, courtMatch.teamB.player2Id],
+          m
+        );
+      }
+    });
 
     const waitingPlayerIds: string[] = [];
 
@@ -567,8 +777,12 @@ export function generateMatchProjections(
 
     results.push({
       matchIndex: m,
-      court1: court1Match,
-      court2: court2Match,
+      courts: courtMatches,
+      court1: courtMatches[0] || null,
+      court2: courtMatches[1] || null,
+      court3: courtMatches[2] || null,
+      court4: courtMatches[3] || null,
+      court5: courtMatches[4] || null,
       playingPlayerIds: playingIds,
       waitingPlayerIds,
       isOverridden,
@@ -592,12 +806,13 @@ interface MatchDetailModalProps {
   projection: MatchProjection | null;
   activePlayers: Player[];
   allPlayers: Player[];
+  courtCount: number;
   onSaveOverride: (matchIdx: number, override: MatchOverride) => void;
   onResetOverride: (matchIdx: number) => void;
-  courtShuttlecocks: { court1: number; court2: number };
+  courtShuttlecocks: CourtShuttlecockData;
   onUpdateCourtShuttlecock: (
     matchIdx: number,
-    court: "court1" | "court2",
+    courtKey: string,
     count: number
   ) => void;
 }
@@ -609,6 +824,7 @@ const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
   projection,
   activePlayers,
   allPlayers,
+  courtCount,
   onSaveOverride,
   onResetOverride,
   courtShuttlecocks,
@@ -621,58 +837,65 @@ const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
     return new Map(allPlayers.map((p) => [p.id, p]));
   }, [allPlayers]);
 
-  const [editC1A1, setEditC1A1] = useState("");
-  const [editC1A2, setEditC1A2] = useState("");
-  const [editC1B1, setEditC1B1] = useState("");
-  const [editC1B2, setEditC1B2] = useState("");
-
-  const [editC2A1, setEditC2A1] = useState("");
-  const [editC2A2, setEditC2A2] = useState("");
-  const [editC2B1, setEditC2B1] = useState("");
-  const [editC2B2, setEditC2B2] = useState("");
+  // Edit state dinamis per lapangan: { [cNum]: { a1, a2, b1, b2 } }
+  const [editCourts, setEditCourts] = useState<
+    Record<number, { a1: string; a2: string; b1: string; b2: string }>
+  >({});
 
   React.useEffect(() => {
     if (!projection) return;
     setIsEditMode(projection.isOverridden);
     setErrorMsg(null);
 
-    if (projection.court1) {
-      setEditC1A1(projection.court1.teamA.player1Id);
-      setEditC1A2(projection.court1.teamA.player2Id);
-      setEditC1B1(projection.court1.teamB.player1Id);
-      setEditC1B2(projection.court1.teamB.player2Id);
-    } else {
-      setEditC1A1("");
-      setEditC1A2("");
-      setEditC1B1("");
-      setEditC1B2("");
+    const initialEdit: Record<
+      number,
+      { a1: string; a2: string; b1: string; b2: string }
+    > = {};
+
+    for (let c = 1; c <= courtCount; c++) {
+      const courtMatch =
+        projection.courts?.[c - 1] ||
+        (c === 1 ? projection.court1 : c === 2 ? projection.court2 : null);
+
+      if (courtMatch) {
+        initialEdit[c] = {
+          a1: courtMatch.teamA.player1Id,
+          a2: courtMatch.teamA.player2Id,
+          b1: courtMatch.teamB.player1Id,
+          b2: courtMatch.teamB.player2Id,
+        };
+      } else {
+        initialEdit[c] = { a1: "", a2: "", b1: "", b2: "" };
+      }
     }
 
-    if (projection.court2) {
-      setEditC2A1(projection.court2.teamA.player1Id);
-      setEditC2A2(projection.court2.teamA.player2Id);
-      setEditC2B1(projection.court2.teamB.player1Id);
-      setEditC2B2(projection.court2.teamB.player2Id);
-    } else {
-      setEditC2A1("");
-      setEditC2A2("");
-      setEditC2B1("");
-      setEditC2B2("");
-    }
-  }, [projection, isOpen]);
+    setEditCourts(initialEdit);
+  }, [projection, isOpen, courtCount]);
+
+  const handleCourtPlayerChange = (
+    courtNum: number,
+    slot: "a1" | "a2" | "b1" | "b2",
+    playerId: string
+  ) => {
+    setEditCourts((prev) => ({
+      ...prev,
+      [courtNum]: {
+        ...(prev[courtNum] || { a1: "", a2: "", b1: "", b2: "" }),
+        [slot]: playerId,
+      },
+    }));
+  };
 
   const getPlayerStatusInMatch = useCallback(
     (player: Player) => {
-      const isPlayingInThisMatch = [
-        editC1A1,
-        editC1A2,
-        editC1B1,
-        editC1B2,
-        editC2A1,
-        editC2A2,
-        editC2B1,
-        editC2B2,
-      ].includes(player.id);
+      let isPlayingInThisMatch = false;
+      for (let c = 1; c <= courtCount; c++) {
+        const ec = editCourts[c];
+        if (ec && [ec.a1, ec.a2, ec.b1, ec.b2].includes(player.id)) {
+          isPlayingInThisMatch = true;
+          break;
+        }
+      }
 
       if (isPlayingInThisMatch) {
         return "(sedang bermain)";
@@ -685,55 +908,63 @@ const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
       const wait = projection?.waitCountsSnapshot?.[player.id] ?? 0;
       return `(tunggu ${wait}x)`;
     },
-    [
-      editC1A1,
-      editC1A2,
-      editC1B1,
-      editC1B2,
-      editC2A1,
-      editC2A2,
-      editC2B1,
-      editC2B2,
-      projection,
-    ]
+    [editCourts, courtCount, projection]
   );
 
   if (!isOpen || !projection) return null;
 
   const handleSave = () => {
     setErrorMsg(null);
-    const hasC1 = Boolean(editC1A1 && editC1A2 && editC1B1 && editC1B2);
-    const hasC2 = Boolean(editC2A1 && editC2A2 && editC2B1 && editC2B2);
 
-    if (!hasC1 && !hasC2) {
-      setErrorMsg("Harap pilih susunan pemain untuk minimal Court 1!");
+    const overrideObj: MatchOverride = {
+      courts: {},
+    };
+
+    const allSelectedPlayerIds: string[] = [];
+    let filledCourtsCount = 0;
+
+    for (let c = 1; c <= courtCount; c++) {
+      const ec = editCourts[c];
+      const hasAny = Boolean(ec?.a1 || ec?.a2 || ec?.b1 || ec?.b2);
+      const isComplete = Boolean(ec?.a1 && ec?.a2 && ec?.b1 && ec?.b2);
+
+      if (hasAny && !isComplete) {
+        setErrorMsg(`Formasi Lapangan ${c} belum lengkap (harus 4 pemain)!`);
+        return;
+      }
+
+      if (isComplete) {
+        filledCourtsCount++;
+        allSelectedPlayerIds.push(ec.a1, ec.a2, ec.b1, ec.b2);
+        overrideObj.courts![c] = {
+          teamA: [ec.a1, ec.a2],
+          teamB: [ec.b1, ec.b2],
+        };
+        if (c === 1) overrideObj.court1 = overrideObj.courts![c];
+        if (c === 2) overrideObj.court2 = overrideObj.courts![c];
+        if (c === 3) overrideObj.court3 = overrideObj.courts![c];
+        if (c === 4) overrideObj.court4 = overrideObj.courts![c];
+        if (c === 5) overrideObj.court5 = overrideObj.courts![c];
+      } else {
+        overrideObj.courts![c] = null;
+        if (c === 1) overrideObj.court1 = null;
+        if (c === 2) overrideObj.court2 = null;
+        if (c === 3) overrideObj.court3 = null;
+        if (c === 4) overrideObj.court4 = null;
+        if (c === 5) overrideObj.court5 = null;
+      }
+    }
+
+    if (filledCourtsCount === 0) {
+      setErrorMsg("Harap pilih formasi pemain minimal untuk 1 lapangan!");
       return;
     }
 
-    const selectedIds: string[] = [];
-    if (hasC1) selectedIds.push(editC1A1, editC1A2, editC1B1, editC1B2);
-    if (hasC2) selectedIds.push(editC2A1, editC2A2, editC2B1, editC2B2);
-
-    const uniqueIds = new Set(selectedIds);
-    if (uniqueIds.size !== selectedIds.length) {
+    const uniqueIds = new Set(allSelectedPlayerIds);
+    if (uniqueIds.size !== allSelectedPlayerIds.length) {
       setErrorMsg("Ada pemain yang dipilih lebih dari 1 kali dalam match yang sama!");
       return;
     }
-
-    const overrideObj: MatchOverride = {
-      court1: hasC1
-        ? {
-            teamA: [editC1A1, editC1A2],
-            teamB: [editC1B1, editC1B2],
-          }
-        : null,
-      court2: hasC2
-        ? {
-            teamA: [editC2A1, editC2A2],
-            teamB: [editC2B1, editC2B2],
-          }
-        : null,
-    };
 
     onSaveOverride(matchIndex, overrideObj);
     onClose();
@@ -744,12 +975,9 @@ const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
     onClose();
   };
 
-  const c1Cock = courtShuttlecocks.court1 || 0;
-  const c2Cock = courtShuttlecocks.court2 || 0;
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="relative w-full max-w-2xl bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl shadow-emerald-950/20 overflow-hidden">
+      <div className="relative w-full max-w-3xl bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl shadow-emerald-950/20 overflow-hidden">
         {/* Header Modal */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-950/60">
           <div className="flex items-center gap-3">
@@ -766,7 +994,7 @@ const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
                 )}
               </h3>
               <p className="text-xs text-slate-400">
-                Susunan pemain &amp; input shuttlecock terpisah per lapangan (Court 1 &amp; Court 2).
+                Susunan pemain &amp; input shuttlecock per lapangan (1 s/d {courtCount} lapangan).
               </p>
             </div>
           </div>
@@ -807,388 +1035,239 @@ const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
             </button>
           </div>
 
-          {/* Court 1 Card */}
-          <div className="bg-slate-950/70 border border-emerald-500/30 rounded-xl p-4 relative overflow-hidden">
-            <div className="absolute top-0 right-0 px-3 py-1 bg-emerald-500/20 text-emerald-400 text-xs font-black rounded-bl-xl border-b border-l border-emerald-500/30">
-              COURT 1
-            </div>
+          {/* Daftar Lapangan (1 sampai courtCount) */}
+          <div className="space-y-4">
+            {Array.from({ length: courtCount }, (_, i) => i + 1).map((cNum) => {
+              const theme = COURT_THEMES[cNum] || COURT_THEMES[1];
+              const courtMatch =
+                projection.courts?.[cNum - 1] ||
+                (cNum === 1 ? projection.court1 : cNum === 2 ? projection.court2 : null);
+              const cCock = courtShuttlecocks[`court${cNum}`] || 0;
+              const ec = editCourts[cNum] || { a1: "", a2: "", b1: "", b2: "" };
 
-            <div className="flex items-center justify-between mb-3">
-              <h4 className="text-sm font-bold text-emerald-400 flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                Lapangan 1 (Ganda)
-              </h4>
-            </div>
-
-            {isEditMode ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
-                <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
-                  <div className="text-xs font-bold text-slate-300">Tim A (Court 1)</div>
-                  <select
-                    value={editC1A1}
-                    onChange={(e) => setEditC1A1(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
-                  >
-                    <option value="">-- Pilih Pemain 1 --</option>
-                    {activePlayers.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.isAdmin ? "👑 " : ""}{p.name} (Lvl {p.level}) - {getPlayerStatusInMatch(p)}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    value={editC1A2}
-                    onChange={(e) => setEditC1A2(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
-                  >
-                    <option value="">-- Pilih Pemain 2 --</option>
-                    {activePlayers.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.isAdmin ? "👑 " : ""}{p.name} (Lvl {p.level}) - {getPlayerStatusInMatch(p)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
-                  <div className="text-xs font-bold text-slate-300">Tim B (Court 1)</div>
-                  <select
-                    value={editC1B1}
-                    onChange={(e) => setEditC1B1(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
-                  >
-                    <option value="">-- Pilih Pemain 1 --</option>
-                    {activePlayers.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.isAdmin ? "👑 " : ""}{p.name} (Lvl {p.level}) - {getPlayerStatusInMatch(p)}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    value={editC1B2}
-                    onChange={(e) => setEditC1B2(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
-                  >
-                    <option value="">-- Pilih Pemain 2 --</option>
-                    {activePlayers.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.isAdmin ? "👑 " : ""}{p.name} (Lvl {p.level}) - {getPlayerStatusInMatch(p)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            ) : projection.court1 ? (
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-3 bg-slate-900/90 rounded-xl border border-slate-800/80">
-                <div className="flex-1 text-center sm:text-left">
-                  <div className="text-xs text-slate-400 font-semibold mb-1">
-                    TIM A (Level: {projection.court1.teamALevel})
-                  </div>
-                  <div className="text-sm font-bold text-white flex items-center gap-1 sm:justify-start justify-center">
-                    {playerMap.get(projection.court1.teamA.player1Id)?.isAdmin && <span>👑</span>}
-                    <span>{playerMap.get(projection.court1.teamA.player1Id)?.name}</span>
-                    <span className="text-emerald-400 text-xs ml-1 font-mono">
-                      [L{playerMap.get(projection.court1.teamA.player1Id)?.level}]
-                    </span>
-                  </div>
-                  <div className="text-sm font-bold text-white flex items-center gap-1 sm:justify-start justify-center">
-                    {playerMap.get(projection.court1.teamA.player2Id)?.isAdmin && <span>👑</span>}
-                    <span>{playerMap.get(projection.court1.teamA.player2Id)?.name}</span>
-                    <span className="text-emerald-400 text-xs ml-1 font-mono">
-                      [L{playerMap.get(projection.court1.teamA.player2Id)?.level}]
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex flex-col items-center gap-1">
-                  <div className="px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-black">
-                    VS
-                  </div>
-                  <span
-                    className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border ${
-                      projection.court1.levelDiff <= 2
-                        ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
-                        : "bg-rose-500/10 text-rose-400 border-rose-500/30"
-                    }`}
-                  >
-                    Δ {projection.court1.levelDiff} Lvl {projection.court1.levelDiff <= 2 ? "✓" : "⚠️"}
-                  </span>
-                </div>
-
-                <div className="flex-1 text-center sm:text-right">
-                  <div className="text-xs text-slate-400 font-semibold mb-1">
-                    TIM B (Level: {projection.court1.teamBLevel})
-                  </div>
-                  <div className="text-sm font-bold text-white flex items-center gap-1 sm:justify-end justify-center">
-                    {playerMap.get(projection.court1.teamB.player1Id)?.isAdmin && <span>👑</span>}
-                    <span>{playerMap.get(projection.court1.teamB.player1Id)?.name}</span>
-                    <span className="text-emerald-400 text-xs ml-1 font-mono">
-                      [L{playerMap.get(projection.court1.teamB.player1Id)?.level}]
-                    </span>
-                  </div>
-                  <div className="text-sm font-bold text-white flex items-center gap-1 sm:justify-end justify-center">
-                    {playerMap.get(projection.court1.teamB.player2Id)?.isAdmin && <span>👑</span>}
-                    <span>{playerMap.get(projection.court1.teamB.player2Id)?.name}</span>
-                    <span className="text-emerald-400 text-xs ml-1 font-mono">
-                      [L{playerMap.get(projection.court1.teamB.player2Id)?.level}]
-                    </span>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="p-4 text-center text-xs text-slate-500 italic">
-                Pemain aktif kurang dari 4 orang untuk Court 1.
-              </div>
-            )}
-
-            {/* Input Shuttlecock Khusus Lapangan 1 */}
-            <div className="mt-3 pt-3 border-t border-emerald-500/20 flex items-center justify-between bg-slate-900/50 p-2.5 rounded-lg">
-              <div className="flex items-center gap-2">
-                <span className="text-sm">🏸</span>
-                <div>
-                  <div className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
-                    <span>Shuttlecock Court 1</span>
-                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-mono">
-                      Rp {(c1Cock * 3000).toLocaleString("id-ID")}
-                    </span>
-                  </div>
-                  <div className="text-[10px] text-slate-400">
-                    Dikenakan kepada pemain reguler yang bertanding di Court 1
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-1.5 shrink-0">
-                <button
-                  type="button"
-                  onClick={() =>
-                    onUpdateCourtShuttlecock(
-                      matchIndex,
-                      "court1",
-                      Math.max(0, c1Cock - 1)
-                    )
-                  }
-                  className="w-7 h-7 rounded bg-slate-800 hover:bg-slate-700 text-white font-bold flex items-center justify-center text-xs transition border border-slate-700"
+              return (
+                <div
+                  key={cNum}
+                  className={`bg-slate-950/70 border rounded-xl p-4 relative overflow-hidden ${theme.borderClass}`}
                 >
-                  -
-                </button>
-                <input
-                  type="number"
-                  min={0}
-                  value={c1Cock}
-                  onChange={(e) =>
-                    onUpdateCourtShuttlecock(
-                      matchIndex,
-                      "court1",
-                      Math.max(0, parseInt(e.target.value) || 0)
-                    )
-                  }
-                  className="w-12 bg-slate-950 border border-slate-700 rounded text-center text-xs font-black text-emerald-400 py-1 focus:outline-none focus:border-emerald-500"
-                />
-                <button
-                  type="button"
-                  onClick={() =>
-                    onUpdateCourtShuttlecock(matchIndex, "court1", c1Cock + 1)
-                  }
-                  className="w-7 h-7 rounded bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold flex items-center justify-center text-xs transition"
-                >
-                  +
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Court 2 Card */}
-          <div className="bg-slate-950/70 border border-rose-500/30 rounded-xl p-4 relative overflow-hidden">
-            <div className="absolute top-0 right-0 px-3 py-1 bg-rose-500/20 text-rose-400 text-xs font-black rounded-bl-xl border-b border-l border-rose-500/30">
-              COURT 2
-            </div>
-
-            <div className="flex items-center justify-between mb-3">
-              <h4 className="text-sm font-bold text-rose-400 flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse"></span>
-                Lapangan 2 (Ganda)
-              </h4>
-            </div>
-
-            {isEditMode ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
-                <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
-                  <div className="text-xs font-bold text-slate-300">Tim A (Court 2)</div>
-                  <select
-                    value={editC2A1}
-                    onChange={(e) => setEditC2A1(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                  <div
+                    className={`absolute top-0 right-0 px-3 py-1 text-xs font-black rounded-bl-xl border-b border-l uppercase ${theme.bgHeaderClass} ${theme.borderClass}`}
                   >
-                    <option value="">-- Pilih Pemain 1 --</option>
-                    {activePlayers.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.isAdmin ? "👑 " : ""}{p.name} (Lvl {p.level}) - {getPlayerStatusInMatch(p)}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    value={editC2A2}
-                    onChange={(e) => setEditC2A2(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                    COURT {cNum}
+                  </div>
+
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className={`text-sm font-bold flex items-center gap-2 ${theme.textClass}`}>
+                      <span className={`w-2.5 h-2.5 rounded-full ${theme.accentBg} animate-pulse`}></span>
+                      {theme.name} (Ganda)
+                    </h4>
+                  </div>
+
+                  {isEditMode ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+                      <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
+                        <div className="text-xs font-bold text-slate-300">
+                          Tim A ({theme.name})
+                        </div>
+                        <select
+                          value={ec.a1}
+                          onChange={(e) =>
+                            handleCourtPlayerChange(cNum, "a1", e.target.value)
+                          }
+                          className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                        >
+                          <option value="">-- Pilih Pemain 1 --</option>
+                          {activePlayers.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.isAdmin ? "👑 " : ""}{p.name} (Lvl {p.level}) - {getPlayerStatusInMatch(p)}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          value={ec.a2}
+                          onChange={(e) =>
+                            handleCourtPlayerChange(cNum, "a2", e.target.value)
+                          }
+                          className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                        >
+                          <option value="">-- Pilih Pemain 2 --</option>
+                          {activePlayers.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.isAdmin ? "👑 " : ""}{p.name} (Lvl {p.level}) - {getPlayerStatusInMatch(p)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
+                        <div className="text-xs font-bold text-slate-300">
+                          Tim B ({theme.name})
+                        </div>
+                        <select
+                          value={ec.b1}
+                          onChange={(e) =>
+                            handleCourtPlayerChange(cNum, "b1", e.target.value)
+                          }
+                          className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                        >
+                          <option value="">-- Pilih Pemain 1 --</option>
+                          {activePlayers.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.isAdmin ? "👑 " : ""}{p.name} (Lvl {p.level}) - {getPlayerStatusInMatch(p)}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          value={ec.b2}
+                          onChange={(e) =>
+                            handleCourtPlayerChange(cNum, "b2", e.target.value)
+                          }
+                          className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                        >
+                          <option value="">-- Pilih Pemain 2 --</option>
+                          {activePlayers.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.isAdmin ? "👑 " : ""}{p.name} (Lvl {p.level}) - {getPlayerStatusInMatch(p)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  ) : courtMatch ? (
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-3 bg-slate-900/90 rounded-xl border border-slate-800/80">
+                      <div className="flex-1 text-center sm:text-left">
+                        <div className="text-xs text-slate-400 font-semibold mb-1">
+                          TIM A (Level: {courtMatch.teamALevel})
+                        </div>
+                        <div className="text-sm font-bold text-white flex items-center gap-1 sm:justify-start justify-center">
+                          {playerMap.get(courtMatch.teamA.player1Id)?.isAdmin && <span>👑</span>}
+                          <span>{playerMap.get(courtMatch.teamA.player1Id)?.name}</span>
+                          <span className={`${theme.textClass} text-xs ml-1 font-mono`}>
+                            [L{playerMap.get(courtMatch.teamA.player1Id)?.level}]
+                          </span>
+                        </div>
+                        <div className="text-sm font-bold text-white flex items-center gap-1 sm:justify-start justify-center">
+                          {playerMap.get(courtMatch.teamA.player2Id)?.isAdmin && <span>👑</span>}
+                          <span>{playerMap.get(courtMatch.teamA.player2Id)?.name}</span>
+                          <span className={`${theme.textClass} text-xs ml-1 font-mono`}>
+                            [L{playerMap.get(courtMatch.teamA.player2Id)?.level}]
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col items-center gap-1">
+                        <div
+                          className={`px-3 py-1 rounded-full border text-xs font-black ${theme.bgHeaderClass} ${theme.borderClass}`}
+                        >
+                          VS
+                        </div>
+                        <span
+                          className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border ${
+                            courtMatch.levelDiff <= 2
+                              ? `${theme.bgHeaderClass} ${theme.borderClass}`
+                              : "bg-amber-500/10 text-amber-400 border-amber-500/30"
+                          }`}
+                        >
+                          Δ {courtMatch.levelDiff} Lvl {courtMatch.levelDiff <= 2 ? "✓" : "⚠️"}
+                        </span>
+                      </div>
+
+                      <div className="flex-1 text-center sm:text-right">
+                        <div className="text-xs text-slate-400 font-semibold mb-1">
+                          TIM B (Level: {courtMatch.teamBLevel})
+                        </div>
+                        <div className="text-sm font-bold text-white flex items-center gap-1 sm:justify-end justify-center">
+                          {playerMap.get(courtMatch.teamB.player1Id)?.isAdmin && <span>👑</span>}
+                          <span>{playerMap.get(courtMatch.teamB.player1Id)?.name}</span>
+                          <span className={`${theme.textClass} text-xs ml-1 font-mono`}>
+                            [L{playerMap.get(courtMatch.teamB.player1Id)?.level}]
+                          </span>
+                        </div>
+                        <div className="text-sm font-bold text-white flex items-center gap-1 sm:justify-end justify-center">
+                          {playerMap.get(courtMatch.teamB.player2Id)?.isAdmin && <span>👑</span>}
+                          <span>{playerMap.get(courtMatch.teamB.player2Id)?.name}</span>
+                          <span className={`${theme.textClass} text-xs ml-1 font-mono`}>
+                            [L{playerMap.get(courtMatch.teamB.player2Id)?.level}]
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-4 text-center text-xs text-slate-500 italic">
+                      {activePlayers.filter((p) => !p.isAdmin).length < cNum * 4
+                        ? `Pemain aktif belum mencapai ${cNum * 4} orang (${theme.name} tidak berjalan).`
+                        : `${theme.name} kosong.`}
+                    </div>
+                  )}
+
+                  {/* Input Shuttlecock Khusus Lapangan Ini */}
+                  <div
+                    className={`mt-3 pt-3 border-t flex items-center justify-between bg-slate-900/50 p-2.5 rounded-lg ${theme.borderClass}`}
                   >
-                    <option value="">-- Pilih Pemain 2 --</option>
-                    {activePlayers.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.isAdmin ? "👑 " : ""}{p.name} (Lvl {p.level}) - {getPlayerStatusInMatch(p)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm">🏸</span>
+                      <div>
+                        <div
+                          className={`text-xs font-bold flex items-center gap-1.5 ${theme.textClass}`}
+                        >
+                          <span>Shuttlecock {theme.name}</span>
+                          <span
+                            className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${theme.bgHeaderClass}`}
+                          >
+                            Rp {(cCock * 3000).toLocaleString("id-ID")}
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-slate-400">
+                          Dikenakan kepada pemain reguler yang bertanding di {theme.name}
+                        </div>
+                      </div>
+                    </div>
 
-                <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
-                  <div className="text-xs font-bold text-slate-300">Tim B (Court 2)</div>
-                  <select
-                    value={editC2B1}
-                    onChange={(e) => setEditC2B1(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
-                  >
-                    <option value="">-- Pilih Pemain 1 --</option>
-                    {activePlayers.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.isAdmin ? "👑 " : ""}{p.name} (Lvl {p.level}) - {getPlayerStatusInMatch(p)}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    value={editC2B2}
-                    onChange={(e) => setEditC2B2(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
-                  >
-                    <option value="">-- Pilih Pemain 2 --</option>
-                    {activePlayers.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.isAdmin ? "👑 " : ""}{p.name} (Lvl {p.level}) - {getPlayerStatusInMatch(p)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            ) : projection.court2 ? (
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-3 bg-slate-900/90 rounded-xl border border-slate-800/80">
-                <div className="flex-1 text-center sm:text-left">
-                  <div className="text-xs text-slate-400 font-semibold mb-1">
-                    TIM A (Level: {projection.court2.teamALevel})
-                  </div>
-                  <div className="text-sm font-bold text-white flex items-center gap-1 sm:justify-start justify-center">
-                    {playerMap.get(projection.court2.teamA.player1Id)?.isAdmin && <span>👑</span>}
-                    <span>{playerMap.get(projection.court2.teamA.player1Id)?.name}</span>
-                    <span className="text-rose-400 text-xs ml-1 font-mono">
-                      [L{playerMap.get(projection.court2.teamA.player1Id)?.level}]
-                    </span>
-                  </div>
-                  <div className="text-sm font-bold text-white flex items-center gap-1 sm:justify-start justify-center">
-                    {playerMap.get(projection.court2.teamA.player2Id)?.isAdmin && <span>👑</span>}
-                    <span>{playerMap.get(projection.court2.teamA.player2Id)?.name}</span>
-                    <span className="text-rose-400 text-xs ml-1 font-mono">
-                      [L{playerMap.get(projection.court2.teamA.player2Id)?.level}]
-                    </span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onUpdateCourtShuttlecock(
+                            matchIndex,
+                            `court${cNum}`,
+                            Math.max(0, cCock - 1)
+                          )
+                        }
+                        className="w-7 h-7 rounded bg-slate-800 hover:bg-slate-700 text-white font-bold flex items-center justify-center text-xs transition border border-slate-700"
+                      >
+                        -
+                      </button>
+                      <input
+                        type="number"
+                        min={0}
+                        value={cCock}
+                        onChange={(e) =>
+                          onUpdateCourtShuttlecock(
+                            matchIndex,
+                            `court${cNum}`,
+                            Math.max(0, parseInt(e.target.value) || 0)
+                          )
+                        }
+                        className={`w-12 bg-slate-950 border border-slate-700 rounded text-center text-xs font-black py-1 focus:outline-none ${theme.textClass}`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onUpdateCourtShuttlecock(
+                            matchIndex,
+                            `court${cNum}`,
+                            cCock + 1
+                          )
+                        }
+                        className={`w-7 h-7 rounded font-bold flex items-center justify-center text-xs transition ${theme.accentBg} ${theme.accentHover} ${theme.accentText}`}
+                      >
+                        +
+                      </button>
+                    </div>
                   </div>
                 </div>
-
-                <div className="flex flex-col items-center gap-1">
-                  <div className="px-3 py-1 rounded-full bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-black">
-                    VS
-                  </div>
-                  <span
-                    className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border ${
-                      projection.court2.levelDiff <= 2
-                        ? "bg-rose-500/10 text-rose-400 border-rose-500/30"
-                        : "bg-amber-500/10 text-amber-400 border-amber-500/30"
-                    }`}
-                  >
-                    Δ {projection.court2.levelDiff} Lvl {projection.court2.levelDiff <= 2 ? "✓" : "⚠️"}
-                  </span>
-                </div>
-
-                <div className="flex-1 text-center sm:text-right">
-                  <div className="text-xs text-slate-400 font-semibold mb-1">
-                    TIM B (Level: {projection.court2.teamBLevel})
-                  </div>
-                  <div className="text-sm font-bold text-white flex items-center gap-1 sm:justify-end justify-center">
-                    {playerMap.get(projection.court2.teamB.player1Id)?.isAdmin && <span>👑</span>}
-                    <span>{playerMap.get(projection.court2.teamB.player1Id)?.name}</span>
-                    <span className="text-rose-400 text-xs ml-1 font-mono">
-                      [L{playerMap.get(projection.court2.teamB.player1Id)?.level}]
-                    </span>
-                  </div>
-                  <div className="text-sm font-bold text-white flex items-center gap-1 sm:justify-end justify-center">
-                    {playerMap.get(projection.court2.teamB.player2Id)?.isAdmin && <span>👑</span>}
-                    <span>{playerMap.get(projection.court2.teamB.player2Id)?.name}</span>
-                    <span className="text-rose-400 text-xs ml-1 font-mono">
-                      [L{playerMap.get(projection.court2.teamB.player2Id)?.level}]
-                    </span>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="p-4 text-center text-xs text-slate-500 italic">
-                {activePlayers.length < 8
-                  ? "Pemain aktif belum mencapai 8 orang (Court 2 tidak berjalan)."
-                  : "Court 2 kosong."}
-              </div>
-            )}
-
-            {/* Input Shuttlecock Khusus Lapangan 2 */}
-            <div className="mt-3 pt-3 border-t border-rose-500/20 flex items-center justify-between bg-slate-900/50 p-2.5 rounded-lg">
-              <div className="flex items-center gap-2">
-                <span className="text-sm">🏸</span>
-                <div>
-                  <div className="text-xs font-bold text-rose-400 flex items-center gap-1.5">
-                    <span>Shuttlecock Court 2</span>
-                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-300 font-mono">
-                      Rp {(c2Cock * 3000).toLocaleString("id-ID")}
-                    </span>
-                  </div>
-                  <div className="text-[10px] text-slate-400">
-                    Dikenakan kepada pemain reguler yang bertanding di Court 2
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-1.5 shrink-0">
-                <button
-                  type="button"
-                  onClick={() =>
-                    onUpdateCourtShuttlecock(
-                      matchIndex,
-                      "court2",
-                      Math.max(0, c2Cock - 1)
-                    )
-                  }
-                  className="w-7 h-7 rounded bg-slate-800 hover:bg-slate-700 text-white font-bold flex items-center justify-center text-xs transition border border-slate-700"
-                >
-                  -
-                </button>
-                <input
-                  type="number"
-                  min={0}
-                  value={c2Cock}
-                  onChange={(e) =>
-                    onUpdateCourtShuttlecock(
-                      matchIndex,
-                      "court2",
-                      Math.max(0, parseInt(e.target.value) || 0)
-                    )
-                  }
-                  className="w-12 bg-slate-950 border border-slate-700 rounded text-center text-xs font-black text-rose-400 py-1 focus:outline-none focus:border-rose-500"
-                />
-                <button
-                  type="button"
-                  onClick={() =>
-                    onUpdateCourtShuttlecock(matchIndex, "court2", c2Cock + 1)
-                  }
-                  className="w-7 h-7 rounded bg-rose-500 hover:bg-rose-400 text-slate-950 font-bold flex items-center justify-center text-xs transition"
-                >
-                  +
-                </button>
-              </div>
-            </div>
+              );
+            })}
           </div>
 
           {/* Waiting Players list */}
@@ -1452,6 +1531,7 @@ const EditFeeModal: React.FC<EditFeeModalProps> = ({
 export default function BadmintonRotationApp() {
   const [players, setPlayers] = useState<Player[]>(INITIAL_PLAYERS);
   const [projectedMatchCount, setProjectedMatchCount] = useState<number>(8);
+  const [courtCount, setCourtCount] = useState<number>(2);
   const [overrides, setOverrides] = useState<Record<number, MatchOverride>>({});
   const [selectedMatchIdx, setSelectedMatchIdx] = useState<number | null>(null);
 
@@ -1583,14 +1663,14 @@ export default function BadmintonRotationApp() {
   }, []);
 
   const handleUpdateCourtShuttlecock = useCallback(
-    (matchIdx: number, court: "court1" | "court2", count: number) => {
+    (matchIdx: number, courtKey: string, count: number) => {
       setMatchCourtShuttlecocks((prev) => {
-        const current = prev[matchIdx] || { court1: 0, court2: 0 };
+        const current = prev[matchIdx] || {};
         return {
           ...prev,
           [matchIdx]: {
             ...current,
-            [court]: Math.max(0, count),
+            [courtKey]: Math.max(0, count),
           },
         };
       });
@@ -1620,12 +1700,14 @@ export default function BadmintonRotationApp() {
   }, [players]);
 
   const projections = useMemo(() => {
-    return generateMatchProjections(players, projectedMatchCount, overrides);
-  }, [players, projectedMatchCount, overrides]);
+    return generateMatchProjections(players, projectedMatchCount, overrides, courtCount);
+  }, [players, projectedMatchCount, overrides, courtCount]);
 
   const totalSessionShuttlecocks = useMemo(() => {
     return Object.values(matchCourtShuttlecocks).reduce(
-      (sum, val) => sum + (val.court1 || 0) + (val.court2 || 0),
+      (sum, val) =>
+        sum +
+        Object.values(val).reduce((courtSum, count) => courtSum + (count || 0), 0),
       0
     );
   }, [matchCourtShuttlecocks]);
@@ -1647,6 +1729,7 @@ export default function BadmintonRotationApp() {
         isCustom: boolean;
         c1Count: number;
         c2Count: number;
+        courtBreakdown: Record<string, number>;
       }
     >();
 
@@ -1660,6 +1743,7 @@ export default function BadmintonRotationApp() {
           isCustom: false,
           c1Count: 0,
           c2Count: 0,
+          courtBreakdown: {},
         });
         continue;
       }
@@ -1668,19 +1752,21 @@ export default function BadmintonRotationApp() {
       let totalPlayerShuttlecocks = 0;
       let c1Count = 0;
       let c2Count = 0;
+      const courtBreakdown: Record<string, number> = {};
+      for (let c = 1; c <= courtCount; c++) {
+        courtBreakdown[`c${c}`] = 0;
+      }
 
       for (const proj of projections) {
-        const court = proj.playerCourts[player.id];
-        if (court === "c1") {
+        const courtCode = proj.playerCourts[player.id];
+        if (courtCode) {
           countPlayed += 1;
-          c1Count += 1;
-          const c1Cock = matchCourtShuttlecocks[proj.matchIndex]?.court1 ?? 0;
-          totalPlayerShuttlecocks += c1Cock;
-        } else if (court === "c2") {
-          countPlayed += 1;
-          c2Count += 1;
-          const c2Cock = matchCourtShuttlecocks[proj.matchIndex]?.court2 ?? 0;
-          totalPlayerShuttlecocks += c2Cock;
+          const cNum = parseInt(courtCode.replace("c", "")) || 1;
+          if (cNum === 1) c1Count += 1;
+          if (cNum === 2) c2Count += 1;
+          courtBreakdown[courtCode] = (courtBreakdown[courtCode] || 0) + 1;
+          const cCock = matchCourtShuttlecocks[proj.matchIndex]?.[`court${cNum}`] ?? 0;
+          totalPlayerShuttlecocks += cCock;
         }
       }
 
@@ -1700,11 +1786,12 @@ export default function BadmintonRotationApp() {
         isCustom,
         c1Count,
         c2Count,
+        courtBreakdown,
       });
     }
 
     return map;
-  }, [players, projections, matchCourtShuttlecocks, customFees]);
+  }, [players, projections, matchCourtShuttlecocks, customFees, courtCount]);
 
   const totalKas = useMemo(() => {
     let total = 0;
@@ -1719,16 +1806,15 @@ export default function BadmintonRotationApp() {
     const totalPresent = presentPlayers.length;
     // Pemain reguler yang aktif (tanpa admin) menentukan status lapangan otomatis
     const regularPresent = presentPlayers.filter((p) => !p.isAdmin).length;
+    const maxPossible = Math.floor(regularPresent / 4);
+    const activeCourts = Math.min(courtCount, maxPossible);
 
     let courtStatus = "Belum Cukup Pemain";
-    let activeCourts = 0;
 
-    if (regularPresent >= 8) {
-      courtStatus = "2 Lapangan (8 Main, " + (regularPresent - 8) + " Menunggu)";
-      activeCourts = 2;
-    } else if (regularPresent >= 4) {
-      courtStatus = "1 Lapangan (4 Main, " + (regularPresent - 4) + " Menunggu)";
-      activeCourts = 1;
+    if (regularPresent >= courtCount * 4) {
+      courtStatus = `${courtCount} Lapangan (${courtCount * 4} Main, ${regularPresent - courtCount * 4} Menunggu)`;
+    } else if (activeCourts > 0) {
+      courtStatus = `${activeCourts}/${courtCount} Lapangan (${activeCourts * 4} Main, ${regularPresent - activeCourts * 4} Menunggu)`;
     } else {
       courtStatus = "Kurang " + (4 - regularPresent) + " Orang Lagi";
     }
@@ -1757,7 +1843,7 @@ export default function BadmintonRotationApp() {
       cashPaidCount,
       totalPaidCount,
     };
-  }, [presentPlayers, overrides, customFees, paymentStatuses]);
+  }, [presentPlayers, overrides, customFees, paymentStatuses, courtCount]);
 
   const selectedProjection = useMemo(() => {
     if (!selectedMatchIdx) return null;
@@ -1788,8 +1874,9 @@ export default function BadmintonRotationApp() {
             </div>
           </div>
 
-          {/* Quick Actions & Setting Proyeksi */}
+          {/* Quick Actions & Setting Proyeksi & Lapangan */}
           <div className="flex flex-wrap items-center gap-3">
+            {/* Setting Proyeksi Match */}
             <div className="flex items-center bg-slate-950/80 border border-slate-800 rounded-xl px-3 py-1.5">
               <label htmlFor="projection-input" className="text-xs text-slate-400 mr-2 font-medium">Proyeksi:</label>
               <input
@@ -1805,6 +1892,32 @@ export default function BadmintonRotationApp() {
                 className="w-12 bg-slate-900 border border-slate-700 rounded-lg text-center text-xs font-bold text-white py-1 focus:outline-none focus:border-emerald-500"
               />
               <span className="text-xs text-slate-500 ml-1.5 font-medium">Match</span>
+            </div>
+
+            {/* Setting Jumlah Lapangan (1 s/d 5 Lapangan) */}
+            <div className="flex items-center bg-slate-950/80 border border-slate-800 rounded-xl px-2.5 py-1.5 gap-1.5 shadow-sm">
+              <span className="text-xs text-slate-400 font-medium">Lapangan:</span>
+              <button
+                type="button"
+                onClick={() => setCourtCount((prev) => Math.max(1, prev - 1))}
+                disabled={courtCount <= 1}
+                className="w-6 h-6 rounded bg-slate-900 hover:bg-slate-800 disabled:opacity-30 border border-slate-700 text-white font-bold flex items-center justify-center text-xs transition"
+                title="Kurangi jumlah lapangan (minimal 1)"
+              >
+                -
+              </button>
+              <span className="w-5 text-center text-xs font-black text-emerald-400 font-mono">
+                {courtCount}
+              </span>
+              <button
+                type="button"
+                onClick={() => setCourtCount((prev) => Math.min(5, prev + 1))}
+                disabled={courtCount >= 5}
+                className="w-6 h-6 rounded bg-slate-900 hover:bg-slate-800 disabled:opacity-30 border border-slate-700 text-white font-bold flex items-center justify-center text-xs transition"
+                title="Tambah jumlah lapangan (maksimal 5)"
+              >
+                +
+              </button>
             </div>
 
             <button
@@ -1843,7 +1956,7 @@ export default function BadmintonRotationApp() {
             <button
               onClick={handleResetToPreset}
               className="px-3 py-1.5 rounded-xl text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800/60 transition"
-              title="Reset ke daftar 12 pemain preset"
+              title="Reset ke daftar data contoh abjad (A, B, C, D...)"
             >
               Data Contoh
             </button>
@@ -2107,7 +2220,7 @@ export default function BadmintonRotationApp() {
                                 {pStats?.shuttlecockCount || 0}🏸
                               </strong>
                               <span className="text-[10px] text-slate-500 block">
-                                (c1: {pStats?.c1Count || 0}, c2: {pStats?.c2Count || 0})
+                                ({Array.from({ length: courtCount }, (_, i) => `c${i + 1}: ${pStats?.courtBreakdown?.[`c${i + 1}`] || 0}`).join(", ")})
                               </span>
                             </span>
                           ) : (
@@ -2222,9 +2335,6 @@ export default function BadmintonRotationApp() {
 
                   {/* Sumbu X Header: Kolom Match M1, M2, dst */}
                   {projections.map((proj) => {
-                    const c1Val = matchCourtShuttlecocks[proj.matchIndex]?.court1 ?? 0;
-                    const c2Val = matchCourtShuttlecocks[proj.matchIndex]?.court2 ?? 0;
-
                     return (
                       <th
                         key={proj.matchIndex}
@@ -2245,52 +2355,45 @@ export default function BadmintonRotationApp() {
                             {proj.isOverridden ? "Manual" : "Auto"}
                           </span>
 
-                          {/* Input Shuttlecock per Lapangan (c1 & c2) */}
+                          {/* Input Shuttlecock per Lapangan (c1 .. c5) */}
                           <div
                             onClick={(e) => e.stopPropagation()}
                             className="mt-0.5 flex flex-col items-center gap-1 w-full"
                           >
-                            <div
-                              className="flex items-center justify-between gap-1 bg-emerald-950/50 border border-emerald-500/30 rounded px-1.5 py-0.5 w-full hover:border-emerald-500/70 transition"
-                              title={`Shuttlecock Lapangan 1 di Match ${proj.matchIndex}`}
-                            >
-                              <span className="text-[9px] font-black text-emerald-400 font-mono">c1</span>
-                              <input
-                                type="number"
-                                min={0}
-                                value={c1Val}
-                                onChange={(e) =>
-                                  handleUpdateCourtShuttlecock(
-                                    proj.matchIndex,
-                                    "court1",
-                                    Math.max(0, parseInt(e.target.value) || 0)
-                                  )
-                                }
-                                className="w-6 bg-transparent text-right text-[10px] font-black text-emerald-300 focus:outline-none cursor-text"
-                              />
-                            </div>
-
-                            {(presentPlayers.filter((p) => !p.isAdmin).length >= 8 || proj.court2 !== null) && (
-                              <div
-                                className="flex items-center justify-between gap-1 bg-rose-950/50 border border-rose-500/30 rounded px-1.5 py-0.5 w-full hover:border-rose-500/70 transition"
-                                title={`Shuttlecock Lapangan 2 di Match ${proj.matchIndex}`}
-                              >
-                                <span className="text-[9px] font-black text-rose-400 font-mono">c2</span>
-                                <input
-                                  type="number"
-                                  min={0}
-                                  value={c2Val}
-                                  onChange={(e) =>
-                                    handleUpdateCourtShuttlecock(
-                                      proj.matchIndex,
-                                      "court2",
-                                      Math.max(0, parseInt(e.target.value) || 0)
-                                    )
-                                  }
-                                  className="w-6 bg-transparent text-right text-[10px] font-black text-rose-300 focus:outline-none cursor-text"
-                                />
-                              </div>
-                            )}
+                            {Array.from({ length: courtCount }, (_, i) => i + 1).map((cNum) => {
+                              const courtMatch = proj.courts?.[cNum - 1] || null;
+                              const cVal = matchCourtShuttlecocks[proj.matchIndex]?.[`court${cNum}`] ?? 0;
+                              // Tampilkan input jika lapangan terisi di match ini atau sudah ada input cock
+                              const regularActive = presentPlayers.filter((p) => !p.isAdmin).length;
+                              if (!courtMatch && cVal === 0 && regularActive < cNum * 4) {
+                                return null;
+                              }
+                              const theme = COURT_THEMES[cNum] || COURT_THEMES[1];
+                              return (
+                                <div
+                                  key={cNum}
+                                  className={`flex items-center justify-between gap-1 rounded px-1.5 py-0.5 w-full transition border ${theme.bgSubtleClass}`}
+                                  title={`Shuttlecock ${theme.name} di Match ${proj.matchIndex}`}
+                                >
+                                  <span className={`text-[9px] font-black font-mono ${theme.textClass}`}>
+                                    {theme.code}
+                                  </span>
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    value={cVal}
+                                    onChange={(e) =>
+                                      handleUpdateCourtShuttlecock(
+                                        proj.matchIndex,
+                                        `court${cNum}`,
+                                        Math.max(0, parseInt(e.target.value) || 0)
+                                      )
+                                    }
+                                    className={`w-6 bg-transparent text-right text-[10px] font-black focus:outline-none cursor-text ${theme.textClass}`}
+                                  />
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                       </th>
@@ -2464,7 +2567,25 @@ export default function BadmintonRotationApp() {
 
                         {/* Sel Kolom Match (Sumbu X) */}
                         {projections.map((proj) => {
-                          const court = proj.playerCourts[player.id];
+                          const courtCode = proj.playerCourts[player.id];
+
+                          if (courtCode) {
+                            const cNum = parseInt(courtCode.replace("c", "")) || 1;
+                            const theme = COURT_THEMES[cNum] || COURT_THEMES[1];
+                            return (
+                              <td
+                                key={proj.matchIndex}
+                                onClick={() => setSelectedMatchIdx(proj.matchIndex)}
+                                className="py-2 px-2 text-center border-r border-slate-800/50 cursor-pointer hover:bg-slate-800/50 transition-colors"
+                              >
+                                <span
+                                  className={`inline-block px-2.5 py-1 rounded-md text-xs font-black tracking-wider uppercase border shadow-sm ${theme.badgeClass}`}
+                                >
+                                  {theme.code}
+                                </span>
+                              </td>
+                            );
+                          }
 
                           return (
                             <td
@@ -2472,19 +2593,9 @@ export default function BadmintonRotationApp() {
                               onClick={() => setSelectedMatchIdx(proj.matchIndex)}
                               className="py-2 px-2 text-center border-r border-slate-800/50 cursor-pointer hover:bg-slate-800/50 transition-colors"
                             >
-                              {court === "c1" ? (
-                                <span className="inline-block px-2.5 py-1 rounded-md text-xs font-black tracking-wider uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm shadow-emerald-950/40">
-                                  c1
-                                </span>
-                              ) : court === "c2" ? (
-                                <span className="inline-block px-2.5 py-1 rounded-md text-xs font-black tracking-wider uppercase bg-rose-500/20 text-rose-300 border border-rose-500/40 shadow-sm shadow-rose-950/40">
-                                  c2
-                                </span>
-                              ) : (
-                                <span className="text-slate-700 select-none font-black text-xs">
-                                  -
-                                </span>
-                              )}
+                              <span className="text-slate-700 select-none font-black text-xs">
+                                -
+                              </span>
                             </td>
                           );
                         })}
@@ -2525,12 +2636,13 @@ export default function BadmintonRotationApp() {
         projection={selectedProjection}
         activePlayers={presentPlayers}
         allPlayers={players}
+        courtCount={courtCount}
         onSaveOverride={handleSaveOverride}
         onResetOverride={handleResetSingleOverride}
         courtShuttlecocks={
           selectedMatchIdx !== null
-            ? matchCourtShuttlecocks[selectedMatchIdx] || { court1: 0, court2: 0 }
-            : { court1: 0, court2: 0 }
+            ? matchCourtShuttlecocks[selectedMatchIdx] || {}
+            : {}
         }
         onUpdateCourtShuttlecock={handleUpdateCourtShuttlecock}
       />
