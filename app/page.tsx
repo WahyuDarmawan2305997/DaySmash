@@ -1710,6 +1710,9 @@ export default function BadmintonRotationApp() {
 
   const [showPlayerManager, setShowPlayerManager] = useState<boolean>(false);
 
+  // State Tab Navigasi Menu: "pertandingan" | "spreadsheet"
+  const [activeTab, setActiveTab] = useState<"pertandingan" | "spreadsheet">("pertandingan");
+
   const handleTogglePresent = useCallback((playerId: string) => {
     setPlayers((prev) => {
       const maxArrival = prev
@@ -1856,6 +1859,10 @@ export default function BadmintonRotationApp() {
     return players
       .filter((p) => p.isPresent)
       .sort((a, b) => a.arrivalOrder - b.arrivalOrder);
+  }, [players]);
+
+  const playerMap = useMemo(() => {
+    return new Map<string, Player>(players.map((p) => [p.id, p]));
   }, [players]);
 
   const projections = useMemo(() => {
@@ -2067,6 +2074,41 @@ export default function BadmintonRotationApp() {
                 Sistem rotasi ganda otomatis, pemain spesial Admin, live level editor &amp; iuran
               </p>
             </div>
+          </div>
+
+          {/* Menu Navigasi Utama */}
+          <div className="flex items-center bg-slate-950/80 p-1 rounded-xl border border-slate-800 shadow-inner">
+            <button
+              type="button"
+              onClick={() => setActiveTab("pertandingan")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+                activeTab === "pertandingan"
+                  ? "bg-emerald-500 text-slate-950 shadow-md font-black"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              <span>🏸 Pertandingan</span>
+              <span
+                className={`text-[10px] px-1.5 py-0.2 rounded-md ${
+                  activeTab === "pertandingan"
+                    ? "bg-slate-950/20 text-slate-950 font-mono font-bold"
+                    : "bg-slate-800 text-slate-400 font-mono"
+                }`}
+              >
+                M1-M{projectedMatchCount}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("spreadsheet")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+                activeTab === "spreadsheet"
+                  ? "bg-emerald-500 text-slate-950 shadow-md font-black"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              <span>📊 Rotasi Pemain</span>
+            </button>
           </div>
 
           {/* Quick Actions & Setting Proyeksi & Lapangan */}
@@ -2510,9 +2552,302 @@ export default function BadmintonRotationApp() {
         )}
 
         {/* ===================================================================
-            TAMPILAN UTAMA: SPREADSHEET VIEW
+            MENU TAB SWITCHER (DESKTOP & MOBILE)
         ==================================================================== */}
-        <section className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
+        <div className="flex items-center justify-between flex-wrap gap-3 pb-1">
+          <div className="flex items-center bg-slate-900/90 p-1.5 rounded-2xl border border-slate-800 shadow-sm">
+            <button
+              type="button"
+              onClick={() => setActiveTab("pertandingan")}
+              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 ${
+                activeTab === "pertandingan"
+                  ? "bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20 font-black"
+                  : "text-slate-400 hover:text-white hover:bg-slate-800/60"
+              }`}
+            >
+              <span>🏸 Pertandingan</span>
+              <span
+                className={`text-[11px] px-2 py-0.5 rounded-full font-mono font-bold ${
+                  activeTab === "pertandingan"
+                    ? "bg-slate-950/25 text-slate-950"
+                    : "bg-slate-800 text-emerald-400 border border-slate-700"
+                }`}
+              >
+                M1 - M{projectedMatchCount}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("spreadsheet")}
+              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 ${
+                activeTab === "spreadsheet"
+                  ? "bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20 font-black"
+                  : "text-slate-400 hover:text-white hover:bg-slate-800/60"
+              }`}
+            >
+              <span>📊 Rotasi Pemain (Spreadsheet)</span>
+            </button>
+          </div>
+
+          <div className="text-xs text-slate-400 hidden sm:flex items-center gap-3 bg-slate-900/60 border border-slate-800/80 px-3.5 py-2 rounded-xl">
+            <span>🏁 Selesai: <strong className="text-emerald-400 font-mono font-bold">{stats.completedCount}</strong>/{projectedMatchCount} Match</span>
+            <span>·</span>
+            <span>🏸 Total Cock: <strong className="text-emerald-400 font-mono font-bold">{totalSessionShuttlecocks}</strong></span>
+          </div>
+        </div>
+
+        {/* ===================================================================
+            KONTEN TAMPILAN: TABEL PERTANDINGAN ATAU SPREADSHEET
+        ==================================================================== */}
+        {activeTab === "pertandingan" ? (
+          <section className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden animate-in fade-in duration-200">
+            {/* Header Tabel Pertandingan */}
+            <div className="p-4 sm:px-6 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 bg-slate-950/50">
+              <div>
+                <h2 className="text-base font-bold text-white flex items-center gap-2">
+                  <span>🏸 Tabel Pertandingan (M1 s/d M{projectedMatchCount})</span>
+                </h2>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Daftar pertandingan ringkas: nama siapa vs siapa, lapangan, jumlah kok yang dipakai, dan status selesai.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 text-xs">
+                <span className="px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-bold flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                  <span>{stats.completedCount} Selesai</span>
+                </span>
+                <span className="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-400 font-medium">
+                  {projectedMatchCount - stats.completedCount} Belum Selesai
+                </span>
+              </div>
+            </div>
+
+            {/* Tabel Pertandingan */}
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-left">
+                <thead>
+                  <tr className="bg-slate-950/90 border-b border-slate-800 text-slate-400 uppercase tracking-wider text-xs font-semibold">
+                    <th className="py-3 px-4 w-24 text-center">Match</th>
+                    <th className="py-3 px-4 w-40">Lapangan</th>
+                    <th className="py-3 px-4 min-w-[320px]">Pertandingan (Siapa vs Siapa)</th>
+                    <th className="py-3 px-4 w-48 text-center">Jumlah Kok</th>
+                    <th className="py-3 px-4 w-48 text-center">Status Pertandingan</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60">
+                  {presentPlayers.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="py-12 text-center text-slate-400 italic text-sm">
+                        Belum ada pemain yang berstatus hadir. Buka panel &quot;Kelola Pemain&quot; untuk mencentang kehadiran.
+                      </td>
+                    </tr>
+                  ) : (
+                    projections.flatMap((proj) => {
+                      const isCompleted = Boolean(completedMatches[proj.matchIndex]);
+                      const activeCourtsList = Array.from({ length: courtCount }, (_, i) => i + 1);
+
+                      return activeCourtsList.map((cNum) => {
+                        const theme = COURT_THEMES[cNum] || COURT_THEMES[1];
+                        const courtMatch =
+                          proj.courts?.[cNum - 1] ||
+                          (cNum === 1 ? proj.court1 : cNum === 2 ? proj.court2 : null);
+                        const cockCount =
+                          matchCourtShuttlecocks[proj.matchIndex]?.[`court${cNum}`] ?? 0;
+
+                        const pA1 = courtMatch?.teamA?.player1Id ? playerMap.get(courtMatch.teamA.player1Id) : null;
+                        const pA2 = courtMatch?.teamA?.player2Id ? playerMap.get(courtMatch.teamA.player2Id) : null;
+                        const pB1 = courtMatch?.teamB?.player1Id ? playerMap.get(courtMatch.teamB.player1Id) : null;
+                        const pB2 = courtMatch?.teamB?.player2Id ? playerMap.get(courtMatch.teamB.player2Id) : null;
+
+                        const hasMatch = Boolean(pA1 && pA2 && pB1 && pB2);
+
+                        return (
+                          <tr
+                            key={`m${proj.matchIndex}-c${cNum}`}
+                            className={`transition-colors ${
+                              isCompleted
+                                ? "bg-emerald-950/20 hover:bg-emerald-950/30 border-l-4 border-l-emerald-500"
+                                : "hover:bg-slate-800/40 border-l-4 border-l-transparent"
+                            }`}
+                          >
+                            {/* Kolom Match */}
+                            <td className="py-3.5 px-4 text-center">
+                              <button
+                                type="button"
+                                onClick={() => setSelectedMatchIdx(proj.matchIndex)}
+                                className={`inline-flex items-center justify-center font-mono font-black text-xs px-2.5 py-1 rounded-lg border transition ${
+                                  isCompleted
+                                    ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/30"
+                                    : "bg-slate-950 text-emerald-400 border-slate-800 hover:border-slate-700"
+                                }`}
+                                title="Klik untuk melihat detail atau edit formasi match ini"
+                              >
+                                M{proj.matchIndex}
+                                {proj.isOverridden && (
+                                  <span className="ml-1 text-[10px] text-amber-400" title="Override aktif">
+                                    ✏️
+                                  </span>
+                                )}
+                              </button>
+                            </td>
+
+                            {/* Kolom Lapangan */}
+                            <td className="py-3.5 px-4">
+                              <span
+                                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border shadow-sm ${theme.badgeClass}`}
+                              >
+                                <span className={`w-1.5 h-1.5 rounded-full ${theme.accentBg}`}></span>
+                                {theme.name}
+                              </span>
+                            </td>
+
+                            {/* Kolom Pertandingan (Siapa vs Siapa) */}
+                            <td className="py-3.5 px-4">
+                              {hasMatch ? (
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <div className="flex items-center gap-1.5 font-bold text-white text-sm">
+                                    <span className="text-emerald-400">
+                                      {pA1?.isAdmin && <span className="mr-0.5" title="Admin / Host">👑</span>}
+                                      {pA1?.name}
+                                    </span>
+                                    <span className="text-slate-500 font-normal text-xs">&amp;</span>
+                                    <span className="text-emerald-400">
+                                      {pA2?.isAdmin && <span className="mr-0.5" title="Admin / Host">👑</span>}
+                                      {pA2?.name}
+                                    </span>
+                                  </div>
+
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-black tracking-wider uppercase bg-rose-500/15 text-rose-400 border border-rose-500/30">
+                                    VS
+                                  </span>
+
+                                  <div className="flex items-center gap-1.5 font-bold text-white text-sm">
+                                    <span className="text-sky-400">
+                                      {pB1?.isAdmin && <span className="mr-0.5" title="Admin / Host">👑</span>}
+                                      {pB1?.name}
+                                    </span>
+                                    <span className="text-slate-500 font-normal text-xs">&amp;</span>
+                                    <span className="text-sky-400">
+                                      {pB2?.isAdmin && <span className="mr-0.5" title="Admin / Host">👑</span>}
+                                      {pB2?.name}
+                                    </span>
+                                  </div>
+                                </div>
+                              ) : (
+                                <span className="text-xs text-slate-500 italic">
+                                  - Lapangan Kosong (Kurang Pemain) -
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Kolom Jumlah Kok */}
+                            <td className="py-3.5 px-4 text-center">
+                              <div className="inline-flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleUpdateCourtShuttlecock(
+                                      proj.matchIndex,
+                                      `court${cNum}`,
+                                      Math.max(0, cockCount - 1)
+                                    )
+                                  }
+                                  className="w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 flex items-center justify-center text-xs font-bold transition active:scale-95 disabled:opacity-40"
+                                  title="Kurangi 1 kok"
+                                  disabled={cockCount <= 0}
+                                >
+                                  -
+                                </button>
+                                <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-950 border border-slate-800 min-w-[58px] justify-center">
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    value={cockCount}
+                                    onChange={(e) =>
+                                      handleUpdateCourtShuttlecock(
+                                        proj.matchIndex,
+                                        `court${cNum}`,
+                                        Math.max(0, parseInt(e.target.value) || 0)
+                                      )
+                                    }
+                                    className="w-7 bg-transparent text-center font-mono font-black text-white text-xs focus:outline-none"
+                                    title="Klik untuk ubah angka kok langsung"
+                                  />
+                                  <span className="text-xs" title="Shuttlecock">🏸</span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleUpdateCourtShuttlecock(
+                                      proj.matchIndex,
+                                      `court${cNum}`,
+                                      cockCount + 1
+                                    )
+                                  }
+                                  className="w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 flex items-center justify-center text-xs font-bold transition active:scale-95"
+                                  title="Tambah 1 kok"
+                                >
+                                  +
+                                </button>
+                              </div>
+                            </td>
+
+                            {/* Kolom Status Pertandingan */}
+                            <td className="py-3.5 px-4 text-center">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleToggleMatchCompleted(proj.matchIndex, !isCompleted)
+                                }
+                                className={`inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold border transition shadow-sm select-none cursor-pointer ${
+                                  isCompleted
+                                    ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/50 hover:bg-emerald-500/30 shadow-emerald-950/50"
+                                    : "bg-slate-800/90 text-slate-400 border-slate-700 hover:border-slate-500 hover:text-slate-200"
+                                }`}
+                                title={
+                                  isCompleted
+                                    ? `Match ${proj.matchIndex} sudah Selesai. Klik untuk batalkan.`
+                                    : `Klik untuk menandai Match ${proj.matchIndex} Selesai`
+                                }
+                              >
+                                <span
+                                  className={`w-2 h-2 rounded-full ${
+                                    isCompleted ? "bg-emerald-400 animate-pulse" : "bg-slate-500"
+                                  }`}
+                                ></span>
+                                <span>{isCompleted ? "✓ Selesai" : "⏳ Belum Selesai"}</span>
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      });
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Footer Tabel Pertandingan */}
+            <div className="px-6 py-3.5 bg-slate-950/70 border-t border-slate-800 text-xs text-slate-400 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-4 flex-wrap">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                  <span>Hijau: Pertandingan telah selesai</span>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-slate-500"></span>
+                  <span>Abu-abu: Pertandingan belum selesai</span>
+                </span>
+              </div>
+              <div className="text-[11px] text-slate-400 font-mono">
+                💡 Klik tombol status pada match mana saja untuk mengubah status Selesai / Belum Selesai secara instan.
+              </div>
+            </div>
+          </section>
+        ) : (
+          <section className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
           {/* Header Tabel Spreadsheet */}
           <div className="p-4 sm:px-6 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 bg-slate-950/50">
             <div>
@@ -2908,6 +3243,7 @@ export default function BadmintonRotationApp() {
             </div>
           </div>
         </section>
+        )}
       </main>
 
       {/* =====================================================================
