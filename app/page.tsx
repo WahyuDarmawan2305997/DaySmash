@@ -58,10 +58,22 @@ export interface MatchProjection {
   playingPlayerIds: Set<string>;
   waitingPlayerIds: string[];
   isOverridden: boolean;
+  isCompleted?: boolean;
   playerCourts: Record<string, string | null>; // "c1" | "c2" | "c3" | "c4" | "c5" | null
   // Snapshot statistik pada match ini untuk keperluan audit/UI
   waitCountsSnapshot: Record<string, number>;
   matchesPlayedSnapshot: Record<string, number>;
+}
+
+/**
+ * Data Match Selesai (Terkunci)
+ */
+export interface CompletedMatchInfo {
+  matchIndex: number;
+  courts: (CourtMatch | null)[];
+  playingPlayerIds: string[];
+  waitingPlayerIds: string[];
+  completedAt?: string;
 }
 
 /**
@@ -219,31 +231,34 @@ function calculateMatchCourtPenalty(
 ): number {
   let penalty = 0;
 
+  // Aturan 1: Tidak ada pasangan yang sama
+  // Pasangan yang sama di match berurutan dicegah ketat (penalti 7000)
   const checkPartner = (p1: Player, p2: Player) => {
     const list = partnerHistory.get(p1.id)?.get(p2.id) || [];
     const count = list.length;
     if (count > 0) {
       const lastMatch = list[list.length - 1];
       if (lastMatch === currentMatchIndex - 1) {
-        penalty += 1500;
+        penalty += 7000;
       } else if (lastMatch === currentMatchIndex - 2) {
-        penalty += 600;
+        penalty += 1200;
       }
-      penalty += count * 250;
+      penalty += count * 400;
     }
   };
 
+  // Repetisi lawan diberi bobot lebih ringan agar rotasi partner/musuh tidak mengorbankan kesetaraan level
   const checkOpponent = (p1: Player, p2: Player) => {
     const list = opponentHistory.get(p1.id)?.get(p2.id) || [];
     const count = list.length;
     if (count > 0) {
       const lastMatch = list[list.length - 1];
       if (lastMatch === currentMatchIndex - 1) {
-        penalty += 300;
+        penalty += 120;
       } else if (lastMatch === currentMatchIndex - 2) {
-        penalty += 100;
+        penalty += 40;
       }
-      penalty += count * 60;
+      penalty += count * 30;
     }
   };
 
@@ -255,23 +270,49 @@ function calculateMatchCourtPenalty(
   checkOpponent(teamA[1], teamB[0]);
   checkOpponent(teamA[1], teamB[1]);
 
+  // Aturan 2: Di lapangan tersebut tidak lebih dari 3 orang yang sama dari match sebelumnya
+  // Jika keempat pemain di lapangan ini semuanya bermain bersama di match m-1, berikan penalti tinggi
+  if (currentMatchIndex > 1) {
+    const allFour = [teamA[0], teamA[1], teamB[0], teamB[1]];
+    let sameCourtPairsCount = 0;
+    for (let i = 0; i < 4; i++) {
+      for (let j = i + 1; j < 4; j++) {
+        const p1 = allFour[i].id;
+        const p2 = allFour[j].id;
+        const partList = partnerHistory.get(p1)?.get(p2) || [];
+        const oppList = opponentHistory.get(p1)?.get(p2) || [];
+        if (
+          partList.includes(currentMatchIndex - 1) ||
+          oppList.includes(currentMatchIndex - 1)
+        ) {
+          sameCourtPairsCount++;
+        }
+      }
+    }
+    // Jika keempatnya bersama di lapangan pada match sebelumnya, ada 6 pasangan antar pemain
+    if (sameCourtPairsCount >= 6) {
+      penalty += 5000;
+    }
+  }
+
   const levelTeamA = teamA[0].level + teamA[1].level;
   const levelTeamB = teamB[0].level + teamB[1].level;
   const levelGap = Math.abs(levelTeamA - levelTeamB);
 
-  // Upgrade Logika: Prioritaskan kesetaraan level (maksimal selisih 2 level sesuai updatelogic.txt)
-  // - levelGap <= 2 diperbolehkan dan diprioritaskan
-  // - levelGap > 2 diberikan penalti masif (10.000+) sehingga algoritma tidak akan memilih
-  //   pertandingan timpang walaupun rotasinya baru
+  // Aturan 3: Prioritas Leveling ("Semakin seimbang semakin baik")
+  // Selagi tidak lebih dari 3 orang yang sama dan tidak ada pasangan yang sama:
+  // - levelGap === 0: Prioritas sempurna (penalty 0)
+  // - levelGap === 1: penalty 800 (mengunggulkan rotasi partner/lawan dengan level seimbang)
+  // - levelGap === 2: penalty 2000
+  // - levelGap > 2: Batas keras selisih maksimal 2 (penalti masif 25.000+)
   if (levelGap === 0) {
     penalty += 0;
   } else if (levelGap === 1) {
-    penalty += 120;
+    penalty += 800;
   } else if (levelGap === 2) {
-    penalty += 350;
+    penalty += 2000;
   } else {
-    // levelGap > 2 (gap 3, 4, dst)
-    penalty += 10000 + (levelGap - 2) * 5000;
+    penalty += 25000 + (levelGap - 2) * 10000;
   }
 
   return penalty;
@@ -480,7 +521,8 @@ export function generateMatchProjections(
   allPlayers: Player[],
   projectionCount: number,
   overrides: Record<number, MatchOverride>,
-  courtCount: number = 2
+  courtCount: number = 2,
+  completedMatches: Record<number, CompletedMatchInfo> = {}
 ): MatchProjection[] {
   const activePlayers = allPlayers
     .filter((p) => p.isPresent)
@@ -529,6 +571,8 @@ export function generateMatchProjections(
   const results: MatchProjection[] = [];
 
   for (let m = 1; m <= projectionCount; m++) {
+    const isCompleted = Boolean(completedMatches[m]);
+    const completedData = completedMatches[m];
     const isOverridden = Boolean(overrides[m]);
     const playingIds = new Set<string>();
     const courtMatches: (CourtMatch | null)[] = [];
@@ -538,6 +582,84 @@ export function generateMatchProjections(
     for (const p of activePlayers) {
       waitCountsSnapshot[p.id] = currentWaitCount.get(p.id) || 0;
       matchesPlayedSnapshot[p.id] = currentMatchesPlayed.get(p.id) || 0;
+    }
+
+    // KASUS 0: MATCH SUDAH DITANDAI SELESAI (TERKUNCI)
+    // Formasi dibekukan dan penambahan pemain baru tidak mengubah match ini.
+    // Statistik diteruskan untuk melanjutkan match-match berikutnya.
+    if (isCompleted && completedData) {
+      const lockedCourts = completedData.courts || [];
+      const lockedPlaying = new Set<string>(completedData.playingPlayerIds || []);
+      const lockedWaiting = new Set<string>(completedData.waitingPlayerIds || []);
+
+      lockedCourts.forEach((cm) => courtMatches.push(cm));
+      lockedPlaying.forEach((id) => playingIds.add(id));
+
+      const playerCourts: Record<string, string | null> = {};
+
+      courtMatches.forEach((courtMatch) => {
+        if (courtMatch) {
+          const cCode = `c${courtMatch.courtNumber}`;
+          playerCourts[courtMatch.teamA.player1Id] = cCode;
+          playerCourts[courtMatch.teamA.player2Id] = cCode;
+          playerCourts[courtMatch.teamB.player1Id] = cCode;
+          playerCourts[courtMatch.teamB.player2Id] = cCode;
+
+          helperRecordPartnership(courtMatch.teamA.player1Id, courtMatch.teamA.player2Id, m);
+          helperRecordPartnership(courtMatch.teamB.player1Id, courtMatch.teamB.player2Id, m);
+          helperRecordOpponents(
+            [courtMatch.teamA.player1Id, courtMatch.teamA.player2Id],
+            [courtMatch.teamB.player1Id, courtMatch.teamB.player2Id],
+            m
+          );
+        }
+      });
+
+      // Update statistik pemain yang bermain pada match selesai ini
+      for (const pId of playingIds) {
+        currentWaitCount.set(pId, 0);
+        currentMatchesPlayed.set(pId, (currentMatchesPlayed.get(pId) || 0) + 1);
+      }
+
+      // Update pemain yang menunggu pada match selesai ini
+      // PENTING: Pemain baru yang baru hadir/bergabung setelah match ini selesai
+      // tidak ada di lockedWaiting, sehingga waitCount-nya TETAP 0 (tidak dihitung menunggu fiktif).
+      const waitingList: string[] = [];
+      for (const player of activePlayers) {
+        if (playingIds.has(player.id)) continue;
+
+        playerCourts[player.id] = null;
+
+        if (lockedWaiting.has(player.id)) {
+          waitingList.push(player.id);
+          if (!player.isAdmin) {
+            currentWaitCount.set(
+              player.id,
+              (currentWaitCount.get(player.id) || 0) + 1
+            );
+          } else {
+            currentWaitCount.set(player.id, 0);
+          }
+        }
+      }
+
+      results.push({
+        matchIndex: m,
+        courts: courtMatches,
+        court1: courtMatches[0] || null,
+        court2: courtMatches[1] || null,
+        court3: courtMatches[2] || null,
+        court4: courtMatches[3] || null,
+        court5: courtMatches[4] || null,
+        playingPlayerIds: playingIds,
+        waitingPlayerIds: waitingList,
+        isOverridden,
+        isCompleted: true,
+        playerCourts,
+        waitCountsSnapshot,
+        matchesPlayedSnapshot,
+      });
+      continue;
     }
 
     // Helper pembaca override per nomor lapangan
@@ -610,6 +732,7 @@ export function generateMatchProjections(
           playingPlayerIds: new Set(),
           waitingPlayerIds: activePlayers.map((p) => p.id),
           isOverridden: false,
+          isCompleted: false,
           playerCourts: {},
           waitCountsSnapshot,
           matchesPlayedSnapshot,
@@ -786,6 +909,7 @@ export function generateMatchProjections(
       playingPlayerIds: playingIds,
       waitingPlayerIds,
       isOverridden,
+      isCompleted: false,
       playerCourts,
       waitCountsSnapshot,
       matchesPlayedSnapshot,
@@ -815,6 +939,8 @@ interface MatchDetailModalProps {
     courtKey: string,
     count: number
   ) => void;
+  isCompleted: boolean;
+  onToggleCompleted: (matchIdx: number, isCompleted: boolean) => void;
 }
 
 const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
@@ -829,6 +955,8 @@ const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
   onResetOverride,
   courtShuttlecocks,
   onUpdateCourtShuttlecock,
+  isCompleted,
+  onToggleCompleted,
 }) => {
   const [isEditMode, setIsEditMode] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -987,6 +1115,11 @@ const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
             <div>
               <h3 className="text-lg font-bold text-white flex items-center gap-2">
                 Detail Pertandingan Match {matchIndex}
+                {isCompleted && (
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold flex items-center gap-1">
+                    <span>✓</span> Selesai (Terkunci)
+                  </span>
+                )}
                 {projection.isOverridden && (
                   <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 font-semibold">
                     Edited / Override
@@ -1016,13 +1149,33 @@ const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
           )}
 
           {/* Mode Toggle & Keterangan Status */}
-          <div className="flex flex-wrap items-center justify-between bg-slate-950/50 p-2.5 rounded-xl border border-slate-800 gap-2">
-            <span className="text-xs text-slate-300 font-medium px-1">
-              Status Formasi:{" "}
-              <strong className={projection.isOverridden ? "text-amber-400" : "text-emerald-400"}>
-                {projection.isOverridden ? "Manual Override" : "Otomatis (Rekomendasi Sistem)"}
-              </strong>
-            </span>
+          <div className="flex flex-wrap items-center justify-between bg-slate-950/70 p-3 rounded-xl border border-slate-800 gap-3">
+            <div className="flex items-center gap-3">
+              <label
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-bold cursor-pointer transition select-none ${
+                  isCompleted
+                    ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-sm"
+                    : "bg-slate-900 text-slate-400 border-slate-700 hover:border-slate-500 hover:text-slate-200"
+                }`}
+                title="Tandai match ini selesai untuk membekukan formasi dari perubahan"
+              >
+                <input
+                  type="checkbox"
+                  checked={isCompleted}
+                  onChange={(e) => onToggleCompleted(matchIndex, e.target.checked)}
+                  className="w-4 h-4 rounded border-slate-600 text-emerald-500 accent-emerald-500 cursor-pointer"
+                />
+                <span>{isCompleted ? "Match Selesai (Terkunci) ✓" : "Tandai Match Selesai"}</span>
+              </label>
+
+              <span className="text-xs text-slate-300 font-medium hidden sm:inline">
+                Formasi:{" "}
+                <strong className={projection.isOverridden ? "text-amber-400" : "text-emerald-400"}>
+                  {projection.isOverridden ? "Manual Override" : "Otomatis"}
+                </strong>
+              </span>
+            </div>
+
             <button
               onClick={() => setIsEditMode(!isEditMode)}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
@@ -1535,6 +1688,11 @@ export default function BadmintonRotationApp() {
   const [overrides, setOverrides] = useState<Record<number, MatchOverride>>({});
   const [selectedMatchIdx, setSelectedMatchIdx] = useState<number | null>(null);
 
+  // State Match Selesai (Terkunci)
+  const [completedMatches, setCompletedMatches] = useState<
+    Record<number, CompletedMatchInfo>
+  >({});
+
   const [newPlayerName, setNewPlayerName] = useState("");
   const [newPlayerLevel, setNewPlayerLevel] = useState<number>(3);
   const [newPlayerIsPresent, setNewPlayerIsPresent] = useState<boolean>(true);
@@ -1635,6 +1793,7 @@ export default function BadmintonRotationApp() {
     if (confirm("Reset daftar pemain ke data contoh (termasuk Admin)?")) {
       setPlayers(INITIAL_PLAYERS);
       setOverrides({});
+      setCompletedMatches({});
       setMatchCourtShuttlecocks({});
       setCustomFees({});
       setPaymentStatuses({});
@@ -1700,8 +1859,42 @@ export default function BadmintonRotationApp() {
   }, [players]);
 
   const projections = useMemo(() => {
-    return generateMatchProjections(players, projectedMatchCount, overrides, courtCount);
-  }, [players, projectedMatchCount, overrides, courtCount]);
+    return generateMatchProjections(
+      players,
+      projectedMatchCount,
+      overrides,
+      courtCount,
+      completedMatches
+    );
+  }, [players, projectedMatchCount, overrides, courtCount, completedMatches]);
+
+  const handleToggleMatchCompleted = useCallback(
+    (matchIdx: number, isCompleted: boolean) => {
+      if (isCompleted) {
+        // Ambil snapshot formasi match yang sedang aktif untuk dibekukan
+        const proj = projections.find((p) => p.matchIndex === matchIdx);
+        if (proj) {
+          setCompletedMatches((prev) => ({
+            ...prev,
+            [matchIdx]: {
+              matchIndex: matchIdx,
+              courts: proj.courts,
+              playingPlayerIds: Array.from(proj.playingPlayerIds),
+              waitingPlayerIds: [...proj.waitingPlayerIds],
+              completedAt: new Date().toISOString(),
+            },
+          }));
+        }
+      } else {
+        setCompletedMatches((prev) => {
+          const next = { ...prev };
+          delete next[matchIdx];
+          return next;
+        });
+      }
+    },
+    [projections]
+  );
 
   const totalSessionShuttlecocks = useMemo(() => {
     return Object.values(matchCourtShuttlecocks).reduce(
@@ -1821,6 +2014,7 @@ export default function BadmintonRotationApp() {
 
     const overrideCount = Object.keys(overrides).length;
     const customFeeCount = Object.keys(customFees).length;
+    const completedCount = Object.keys(completedMatches).length;
 
     let qrisPaidCount = 0;
     let cashPaidCount = 0;
@@ -1838,12 +2032,13 @@ export default function BadmintonRotationApp() {
       activeCourts,
       overrideCount,
       customFeeCount,
+      completedCount,
       regularPresent,
       qrisPaidCount,
       cashPaidCount,
       totalPaidCount,
     };
-  }, [presentPlayers, overrides, customFees, paymentStatuses, courtCount]);
+  }, [presentPlayers, overrides, customFees, paymentStatuses, courtCount, completedMatches]);
 
   const selectedProjection = useMemo(() => {
     if (!selectedMatchIdx) return null;
@@ -1934,6 +2129,24 @@ export default function BadmintonRotationApp() {
               </span>
             </button>
 
+            {stats.completedCount > 0 && (
+              <button
+                onClick={() => {
+                  if (
+                    confirm(
+                      `Buka kunci semua (${stats.completedCount}) match yang sudah selesai? Formasi akan kembali dihitung dinamis.`
+                    )
+                  ) {
+                    setCompletedMatches({});
+                  }
+                }}
+                className="px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/20 transition flex items-center gap-1.5"
+                title="Buka kunci semua match selesai dan kembalikan ke rotasi dinamis"
+              >
+                <span>Reset {stats.completedCount} Selesai</span>
+              </button>
+            )}
+
             {stats.overrideCount > 0 && (
               <button
                 onClick={handleClearAllOverrides}
@@ -1990,7 +2203,7 @@ export default function BadmintonRotationApp() {
             </div>
           </div>
 
-          {/* KPI 2: Status Lapangan */}
+          {/* KPI 2: Status Lapangan & Progres Match */}
           <div className="bg-slate-900/80 border border-slate-800/80 rounded-2xl p-4 flex items-center gap-3.5 shadow-sm">
             <div
               className={`w-11 h-11 rounded-xl border flex items-center justify-center text-xl font-bold ${
@@ -2005,10 +2218,13 @@ export default function BadmintonRotationApp() {
             </div>
             <div>
               <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                Status Lapangan (Otomatis)
+                Status Lapangan &amp; Progres
               </div>
               <div className="text-sm font-bold text-white truncate max-w-[180px]">
                 {stats.courtStatus}
+              </div>
+              <div className="text-[10px] text-emerald-400 font-semibold flex items-center gap-1 mt-0.5">
+                <span>🏁 {stats.completedCount} dari {projectedMatchCount} Selesai</span>
               </div>
             </div>
           </div>
@@ -2335,24 +2551,49 @@ export default function BadmintonRotationApp() {
 
                   {/* Sumbu X Header: Kolom Match M1, M2, dst */}
                   {projections.map((proj) => {
+                    const isCompleted = Boolean(completedMatches[proj.matchIndex]);
                     return (
                       <th
                         key={proj.matchIndex}
                         onClick={() => setSelectedMatchIdx(proj.matchIndex)}
-                        className="py-2 px-2 text-center border-r border-slate-800/80 min-w-[95px] cursor-pointer hover:bg-slate-800/80 transition-colors group select-none"
+                        className={`py-2 px-2 text-center border-r border-slate-800/80 min-w-[105px] cursor-pointer hover:bg-slate-800/80 transition-colors group select-none ${
+                          isCompleted
+                            ? "bg-emerald-950/25 border-emerald-500/40"
+                            : ""
+                        }`}
                         title="Klik untuk melihat detail atau edit formasi match ini"
                       >
                         <div className="flex flex-col items-center gap-1">
-                          <span className="text-xs font-black text-emerald-400 group-hover:text-emerald-300 font-mono flex items-center gap-1">
-                            M{proj.matchIndex}
-                            {proj.isOverridden && (
-                              <span className="text-[10px] text-amber-400" title="Override aktif">
-                                ✏️
+                          <div className="flex items-center gap-1">
+                            <span
+                              className={`text-xs font-black font-mono flex items-center gap-1 ${
+                                isCompleted
+                                  ? "text-emerald-300"
+                                  : "text-emerald-400 group-hover:text-emerald-300"
+                              }`}
+                            >
+                              M{proj.matchIndex}
+                              {proj.isOverridden && (
+                                <span className="text-[10px] text-amber-400" title="Override aktif">
+                                  ✏️
+                                </span>
+                              )}
+                            </span>
+                            {isCompleted && (
+                              <span
+                                className="text-[9px] px-1 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold"
+                                title="Match selesai (formasi terkunci)"
+                              >
+                                ✓
                               </span>
                             )}
-                          </span>
+                          </div>
                           <span className="text-[10px] text-slate-400 group-hover:text-slate-300">
-                            {proj.isOverridden ? "Manual" : "Auto"}
+                            {isCompleted
+                              ? "Selesai"
+                              : proj.isOverridden
+                              ? "Manual"
+                              : "Auto"}
                           </span>
 
                           {/* Input Shuttlecock per Lapangan (c1 .. c5) */}
@@ -2394,6 +2635,40 @@ export default function BadmintonRotationApp() {
                                 </div>
                               );
                             })}
+                          </div>
+
+                          {/* Checkbox Tandai Match Selesai */}
+                          <div
+                            onClick={(e) => e.stopPropagation()}
+                            className="mt-1.5 w-full pt-1.5 border-t border-slate-800/80 flex flex-col items-center"
+                          >
+                            <label
+                              className={`flex items-center justify-center gap-1.5 px-1.5 py-1 rounded-lg w-full cursor-pointer transition text-[10px] font-bold border select-none ${
+                                isCompleted
+                                  ? "bg-emerald-500/25 text-emerald-300 border-emerald-500/50 shadow-sm shadow-emerald-950/50 hover:bg-emerald-500/35"
+                                  : "bg-slate-950/80 text-slate-400 border-slate-700/70 hover:border-slate-500 hover:text-slate-200"
+                              }`}
+                              title={
+                                isCompleted
+                                  ? `Match ${proj.matchIndex} selesai (Terkunci). Klik untuk membuka kunci.`
+                                  : `Tandai Match ${proj.matchIndex} sudah selesai`
+                              }
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isCompleted}
+                                onChange={(e) =>
+                                  handleToggleMatchCompleted(
+                                    proj.matchIndex,
+                                    e.target.checked
+                                  )
+                                }
+                                className="w-3.5 h-3.5 rounded border-slate-600 text-emerald-500 focus:ring-emerald-500 accent-emerald-500 cursor-pointer"
+                              />
+                              <span className="truncate">
+                                {isCompleted ? "Selesai ✓" : "Selesai"}
+                              </span>
+                            </label>
                           </div>
                         </div>
                       </th>
@@ -2567,6 +2842,7 @@ export default function BadmintonRotationApp() {
 
                         {/* Sel Kolom Match (Sumbu X) */}
                         {projections.map((proj) => {
+                          const isCompleted = Boolean(completedMatches[proj.matchIndex]);
                           const courtCode = proj.playerCourts[player.id];
 
                           if (courtCode) {
@@ -2576,7 +2852,9 @@ export default function BadmintonRotationApp() {
                               <td
                                 key={proj.matchIndex}
                                 onClick={() => setSelectedMatchIdx(proj.matchIndex)}
-                                className="py-2 px-2 text-center border-r border-slate-800/50 cursor-pointer hover:bg-slate-800/50 transition-colors"
+                                className={`py-2 px-2 text-center border-r border-slate-800/50 cursor-pointer hover:bg-slate-800/50 transition-colors ${
+                                  isCompleted ? "bg-emerald-950/15" : ""
+                                }`}
                               >
                                 <span
                                   className={`inline-block px-2.5 py-1 rounded-md text-xs font-black tracking-wider uppercase border shadow-sm ${theme.badgeClass}`}
@@ -2591,7 +2869,9 @@ export default function BadmintonRotationApp() {
                             <td
                               key={proj.matchIndex}
                               onClick={() => setSelectedMatchIdx(proj.matchIndex)}
-                              className="py-2 px-2 text-center border-r border-slate-800/50 cursor-pointer hover:bg-slate-800/50 transition-colors"
+                              className={`py-2 px-2 text-center border-r border-slate-800/50 cursor-pointer hover:bg-slate-800/50 transition-colors ${
+                                isCompleted ? "bg-emerald-950/15" : ""
+                              }`}
                             >
                               <span className="text-slate-700 select-none font-black text-xs">
                                 -
@@ -2609,18 +2889,22 @@ export default function BadmintonRotationApp() {
 
           {/* Footer Spreadsheet */}
           <div className="px-6 py-3.5 bg-slate-950/70 border-t border-slate-800 text-xs text-slate-400 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 flex-wrap">
               <span className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-full bg-purple-500"></span>
                 <span>👑 Pemain Admin: Hanya bermain jika di-setting manual pada match</span>
               </span>
               <span className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-                <span>Prioritas 1: Zero Starvation (tidak ada tunggu &gt; 2 match berturut-turut)</span>
+                <span>Prioritas: Zero Starvation &amp; Kesetaraan Level (Maks. beda 2 level)</span>
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+                <span>🔒 Match Selesai: Mengunci formasi agar penambahan pemain melanjutkan rotasi secara adil</span>
               </span>
             </div>
             <div className="text-[11px] text-slate-400 font-mono">
-              💡 Formasi manual Admin otomatis tercatat ke riwayat partner &amp; lawan match berikutnya.
+              💡 Pemain baru setelah Match 3 tidak wajib main 3x; rotasi normal &amp; level tetap diprioritaskan.
             </div>
           </div>
         </section>
@@ -2645,6 +2929,8 @@ export default function BadmintonRotationApp() {
             : {}
         }
         onUpdateCourtShuttlecock={handleUpdateCourtShuttlecock}
+        isCompleted={Boolean(selectedMatchIdx && completedMatches[selectedMatchIdx])}
+        onToggleCompleted={handleToggleMatchCompleted}
       />
 
       {/* =====================================================================
