@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
 
 // ============================================================================
 // 1. STRUKTUR DATA & INTERFACES
@@ -195,7 +195,7 @@ export const INITIAL_PLAYERS: Player[] = [
     arrivalOrder: 1,
     isAdmin: true,
   },
-  // Daftar Pemain Reguler (A, B, C, D... hingga 22 pemain untuk mencukupi hingga 5 lapangan)
+  // Daftar Pemain Reguler (A s/d P: 16 pemain, kelipatan 8 dari 2 lapangan default)
   { id: "p1", name: "A", level: 5, isPresent: true, arrivalOrder: 2 },
   { id: "p2", name: "B", level: 5, isPresent: true, arrivalOrder: 3 },
   { id: "p3", name: "C", level: 5, isPresent: true, arrivalOrder: 4 },
@@ -212,13 +212,70 @@ export const INITIAL_PLAYERS: Player[] = [
   { id: "p14", name: "N", level: 3, isPresent: true, arrivalOrder: 15 },
   { id: "p15", name: "O", level: 3, isPresent: true, arrivalOrder: 16 },
   { id: "p16", name: "P", level: 3, isPresent: true, arrivalOrder: 17 },
-  { id: "p17", name: "Q", level: 2, isPresent: true, arrivalOrder: 18 },
-  { id: "p18", name: "R", level: 2, isPresent: true, arrivalOrder: 19 },
-  { id: "p19", name: "S", level: 2, isPresent: true, arrivalOrder: 20 },
-  { id: "p20", name: "T", level: 2, isPresent: true, arrivalOrder: 21 },
-  { id: "p21", name: "U", level: 1, isPresent: true, arrivalOrder: 22 },
-  { id: "p22", name: "V", level: 1, isPresent: true, arrivalOrder: 23 },
 ];
+
+// ============================================================================
+// 2b. PERSISTENCE — LOCALSTORAGE AUTOSAVE & BACKUP
+// ============================================================================
+
+const STORAGE_KEY = "daysmash_session";
+
+interface SessionData {
+  players: Player[];
+  projectedMatchCount: number;
+  courtCount: number;
+  overrides: Record<number, MatchOverride>;
+  completedMatches: Record<number, CompletedMatchInfo>;
+  completedCourts: Record<string, boolean>;
+  matchCourtShuttlecocks: Record<number, CourtShuttlecockData>;
+  customFees: Record<string, number>;
+  paymentStatuses: Record<string, "QRIS" | "Cash" | "">;
+  courtPrice: number;
+  shuttlecockPrice: number;
+}
+
+function loadSession(): Partial<SessionData> | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as Partial<SessionData>;
+  } catch {
+    return null;
+  }
+}
+
+function saveSession(data: SessionData): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch {
+    // Quota exceeded — silently fail
+  }
+}
+
+function clearSession(): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // silently fail
+  }
+}
+
+/**
+ * Validasi dasar bahwa objek yang diimport memiliki field yang diharapkan.
+ */
+function isValidSessionData(data: unknown): data is SessionData {
+  if (!data || typeof data !== "object") return false;
+  const d = data as Record<string, unknown>;
+  return (
+    Array.isArray(d.players) &&
+    d.players.length > 0 &&
+    typeof d.courtCount === "number" &&
+    typeof d.projectedMatchCount === "number"
+  );
+}
 
 // ============================================================================
 // 3. LOGIKA ALGORITMA ROTASI & SELEKSI PEMAIN
@@ -2518,6 +2575,7 @@ const FinanceModal: React.FC<FinanceModalProps> = ({
 // ============================================================================
 
 export default function BadmintonRotationApp() {
+  // State sesi — diinisialisasi dengan default (match SSR), lalu di-restore dari localStorage via useEffect
   const [players, setPlayers] = useState<Player[]>(INITIAL_PLAYERS);
   const [projectedMatchCount, setProjectedMatchCount] = useState<number>(8);
   const [courtCount, setCourtCount] = useState<number>(2);
@@ -2565,6 +2623,59 @@ export default function BadmintonRotationApp() {
   // State Tab Navigasi Menu: "pertandingan" | "spreadsheet"
   const [activeTab, setActiveTab] = useState<"pertandingan" | "spreadsheet">("pertandingan");
 
+  // Ref untuk hidden file input (Import)
+  const importInputRef = useRef<HTMLInputElement>(null);
+
+  // State Status Pembayaran per Pemain (Key: playerId, Value: "QRIS" | "Cash" | "")
+  const [paymentStatuses, setPaymentStatuses] = useState<
+    Record<string, "QRIS" | "Cash" | "">
+  >({});
+
+  // Guard: jangan autosave sebelum restore dari localStorage selesai
+  const isRestoredRef = useRef(false);
+
+  // ---- RESTORE sesi dari localStorage setelah hydration (hanya client) ----
+  useEffect(() => {
+    const saved = loadSession();
+    if (saved) {
+      if (saved.players) setPlayers(saved.players);
+      if (saved.projectedMatchCount !== undefined) setProjectedMatchCount(saved.projectedMatchCount);
+      if (saved.courtCount !== undefined) setCourtCount(saved.courtCount);
+      if (saved.overrides) setOverrides(saved.overrides);
+      if (saved.completedMatches) setCompletedMatches(saved.completedMatches);
+      if (saved.completedCourts) setCompletedCourts(saved.completedCourts);
+      if (saved.matchCourtShuttlecocks) setMatchCourtShuttlecocks(saved.matchCourtShuttlecocks);
+      if (saved.customFees) setCustomFees(saved.customFees);
+      if (saved.paymentStatuses) setPaymentStatuses(saved.paymentStatuses);
+      if (saved.courtPrice !== undefined) setCourtPrice(saved.courtPrice);
+      if (saved.shuttlecockPrice !== undefined) setShuttlecockPrice(saved.shuttlecockPrice);
+    }
+    isRestoredRef.current = true;
+  }, []);
+
+  // ---- AUTOSAVE ke localStorage setiap kali data sesi berubah ----
+  useEffect(() => {
+    // Skip autosave pada render pertama (sebelum restore selesai)
+    if (!isRestoredRef.current) return;
+    saveSession({
+      players,
+      projectedMatchCount,
+      courtCount,
+      overrides,
+      completedMatches,
+      completedCourts,
+      matchCourtShuttlecocks,
+      customFees,
+      paymentStatuses,
+      courtPrice,
+      shuttlecockPrice,
+    });
+  }, [
+    players, projectedMatchCount, courtCount, overrides,
+    completedMatches, completedCourts, matchCourtShuttlecocks,
+    customFees, paymentStatuses, courtPrice, shuttlecockPrice,
+  ]);
+
   const handleTogglePresent = useCallback((playerId: string) => {
     setPlayers((prev) => {
       const maxArrival = prev
@@ -2595,11 +2706,6 @@ export default function BadmintonRotationApp() {
       prev.map((p) => (p.id === playerId ? { ...p, name: newName } : p))
     );
   }, []);
-
-  // State Status Pembayaran per Pemain (Key: playerId, Value: "QRIS" | "Cash" | "")
-  const [paymentStatuses, setPaymentStatuses] = useState<
-    Record<string, "QRIS" | "Cash" | "">
-  >({});
 
   const handleUpdatePaymentStatus = useCallback(
     (playerId: string, status: "QRIS" | "Cash" | "") => {
@@ -2647,6 +2753,7 @@ export default function BadmintonRotationApp() {
   const handleResetToPreset = useCallback(() => {
     if (confirm("Reset daftar pemain ke data contoh (termasuk Admin)?")) {
       setPlayers(INITIAL_PLAYERS);
+      setCourtCount(2);
       setOverrides({});
       setCompletedMatches({});
       setCompletedCourts({});
@@ -2654,6 +2761,110 @@ export default function BadmintonRotationApp() {
       setCustomFees({});
       setPaymentStatuses({});
     }
+  }, []);
+
+  // ---- SESI MABAR BARU (reset semua + hapus localStorage) ----
+  const handleNewSession = useCallback(() => {
+    if (confirm("Mulai sesi mabar baru?\n\nSemua data sesi saat ini (pemain, match, pembayaran) akan dihapus.\n\nTip: Export dulu jika ingin menyimpan data sesi ini.")) {
+      setPlayers(INITIAL_PLAYERS);
+      setProjectedMatchCount(8);
+      setCourtCount(2);
+      setOverrides({});
+      setCompletedMatches({});
+      setCompletedCourts({});
+      setMatchCourtShuttlecocks({});
+      setCustomFees({});
+      setPaymentStatuses({});
+      setCourtPrice(62500);
+      setShuttlecockPrice(8500);
+      setSelectedMatchIdx(null);
+      clearSession();
+    }
+  }, []);
+
+  // ---- EXPORT DATA ke file JSON ----
+  const handleExportData = useCallback(() => {
+    const sessionData: SessionData = {
+      players,
+      projectedMatchCount,
+      courtCount,
+      overrides,
+      completedMatches,
+      completedCourts,
+      matchCourtShuttlecocks,
+      customFees,
+      paymentStatuses,
+      courtPrice,
+      shuttlecockPrice,
+    };
+    const json = JSON.stringify(sessionData, null, 2);
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+
+    const now = new Date();
+    const dd = String(now.getDate()).padStart(2, "0");
+    const mm = String(now.getMonth() + 1).padStart(2, "0");
+    const filename = `DaySmash-${dd}-${mm}.json`;
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, [
+    players, projectedMatchCount, courtCount, overrides,
+    completedMatches, completedCourts, matchCourtShuttlecocks,
+    customFees, paymentStatuses, courtPrice, shuttlecockPrice,
+  ]);
+
+  // ---- IMPORT DATA dari file JSON ----
+  const handleImportData = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const text = ev.target?.result as string;
+        const data = JSON.parse(text);
+
+        if (!isValidSessionData(data)) {
+          alert("❌ File tidak valid.\n\nFile harus berupa backup DaySmash (.json) yang berisi data pemain, lapangan, dan match.");
+          return;
+        }
+
+        if (!confirm("Import data backup?\n\nData sesi saat ini akan digantikan oleh data dari file backup.")) {
+          return;
+        }
+
+        // Restore semua state dari file backup
+        setPlayers(data.players);
+        setProjectedMatchCount(data.projectedMatchCount);
+        setCourtCount(data.courtCount);
+        setOverrides(data.overrides ?? {});
+        setCompletedMatches(data.completedMatches ?? {});
+        setCompletedCourts(data.completedCourts ?? {});
+        setMatchCourtShuttlecocks(data.matchCourtShuttlecocks ?? {});
+        setCustomFees(data.customFees ?? {});
+        setPaymentStatuses(data.paymentStatuses ?? {});
+        setCourtPrice(data.courtPrice ?? 62500);
+        setShuttlecockPrice(data.shuttlecockPrice ?? 8500);
+        setSelectedMatchIdx(null);
+
+        // Simpan juga ke localStorage
+        saveSession(data);
+
+        alert("✅ Data berhasil diimport!");
+      } catch {
+        alert("❌ Gagal membaca file.\n\nPastikan file berformat JSON yang valid.");
+      }
+    };
+    reader.readAsText(file);
+
+    // Reset input agar bisa memilih file yang sama lagi
+    e.target.value = "";
   }, []);
 
   const handleClearAllOverrides = useCallback(() => {
@@ -3217,6 +3428,44 @@ export default function BadmintonRotationApp() {
               title="Reset ke data contoh"
             >
               Data Contoh
+            </button>
+
+            {/* Separator */}
+            <div className="w-px h-5 bg-slate-700/50" />
+
+            {/* Export Data */}
+            <button
+              onClick={handleExportData}
+              className="px-2.5 py-1.5 rounded-xl text-xs font-medium bg-sky-400/10 border border-sky-400/25 text-sky-300 hover:bg-sky-400/20 transition flex items-center gap-1"
+              title="Export data sesi ke file JSON"
+            >
+              <span>📥 Export</span>
+            </button>
+
+            {/* Import Data */}
+            <button
+              onClick={() => importInputRef.current?.click()}
+              className="px-2.5 py-1.5 rounded-xl text-xs font-medium bg-sky-400/10 border border-sky-400/25 text-sky-300 hover:bg-sky-400/20 transition flex items-center gap-1"
+              title="Import data sesi dari file JSON"
+            >
+              <span>📤 Import</span>
+            </button>
+            <input
+              ref={importInputRef}
+              type="file"
+              accept=".json,application/json"
+              onChange={handleImportData}
+              className="hidden"
+              aria-hidden="true"
+            />
+
+            {/* Sesi Mabar Baru */}
+            <button
+              onClick={handleNewSession}
+              className="px-2.5 py-1.5 rounded-xl text-xs font-medium bg-rose-400/10 border border-rose-400/25 text-rose-300 hover:bg-rose-400/20 transition flex items-center gap-1"
+              title="Mulai sesi mabar baru (hapus semua data)"
+            >
+              <span>🔄 Sesi Baru</span>
             </button>
           </div>
         </div>
