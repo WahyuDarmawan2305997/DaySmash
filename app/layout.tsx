@@ -15,6 +15,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "DaySmash - Sistem Rotasi Pertandingan Badminton",
   description: "Aplikasi rotasi pertandingan badminton ganda otomatis, adil, anti-monoton dengan spreadsheet view.",
+  icons: {
+    icon: "/photo-logo-daysmash.jpg",
+    shortcut: "/photo-logo-daysmash.jpg",
+    apple: "/photo-logo-daysmash.jpg",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

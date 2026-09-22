@@ -3853,8 +3853,12 @@ export default function BadmintonRotationApp() {
       <header className="border-b border-slate-700/60 bg-slate-850/90 backdrop-blur-xl sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-emerald-400/15 border border-emerald-400/30 flex items-center justify-center text-emerald-300 font-black text-lg shadow-sm">
-              🏸
+            <div className="w-9 h-9 rounded-xl overflow-hidden border border-emerald-400/30 flex items-center justify-center bg-slate-900 shadow-sm shrink-0">
+              <img
+                src="/photo-logo-daysmash.jpg"
+                alt="DaySmash Logo"
+                className="w-full h-full object-cover"
+              />
             </div>
             <div>
               <h1 className="text-base font-bold tracking-tight text-white flex items-center gap-2">
