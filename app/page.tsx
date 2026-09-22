@@ -129,66 +129,66 @@ export const COURT_THEMES: Record<
     name: "Lapangan 1",
     key: "court1",
     code: "c1",
-    badgeClass: "bg-emerald-400/15 text-emerald-200 border-emerald-400/30",
-    borderClass: "border-emerald-400/30",
-    textClass: "text-emerald-300",
-    bgHeaderClass: "bg-emerald-400/15 text-emerald-200",
-    bgSubtleClass: "bg-emerald-950/25 border-emerald-400/20",
-    accentBg: "bg-emerald-400",
-    accentHover: "hover:bg-emerald-300",
-    accentText: "text-slate-900",
+    badgeClass: "bg-[#7B9F97] text-white border border-[#6E8F88]",
+    borderClass: "border-[#7B9F97]/50",
+    textClass: "text-[#23584E]",
+    bgHeaderClass: "bg-[#7B9F97]/20 text-[#23584E]",
+    bgSubtleClass: "bg-[#7B9F97] text-white border-[#6E8F88]",
+    accentBg: "bg-[#7B9F97]",
+    accentHover: "hover:bg-[#6E8F88]",
+    accentText: "text-white",
   },
   2: {
     name: "Lapangan 2",
     key: "court2",
     code: "c2",
-    badgeClass: "bg-rose-400/15 text-rose-200 border-rose-400/30",
-    borderClass: "border-rose-400/30",
-    textClass: "text-rose-300",
-    bgHeaderClass: "bg-rose-400/15 text-rose-200",
-    bgSubtleClass: "bg-rose-950/25 border-rose-400/20",
-    accentBg: "bg-rose-400",
-    accentHover: "hover:bg-rose-300",
-    accentText: "text-slate-900",
+    badgeClass: "bg-[#B9756E] text-white border border-[#A8645E]",
+    borderClass: "border-[#B9756E]/50",
+    textClass: "text-[#873832]",
+    bgHeaderClass: "bg-[#B9756E]/20 text-[#873832]",
+    bgSubtleClass: "bg-[#B9756E] text-white border-[#A8645E]",
+    accentBg: "bg-[#B9756E]",
+    accentHover: "hover:bg-[#A8645E]",
+    accentText: "text-white",
   },
   3: {
     name: "Lapangan 3",
     key: "court3",
     code: "c3",
-    badgeClass: "bg-amber-400/15 text-amber-200 border-amber-400/30",
-    borderClass: "border-amber-400/30",
-    textClass: "text-amber-200",
-    bgHeaderClass: "bg-amber-400/15 text-amber-200",
-    bgSubtleClass: "bg-amber-950/25 border-amber-400/20",
-    accentBg: "bg-amber-300",
-    accentHover: "hover:bg-amber-200",
-    accentText: "text-slate-900",
+    badgeClass: "bg-[#CAA061] text-white border border-[#B98F52]",
+    borderClass: "border-[#CAA061]/50",
+    textClass: "text-[#855D21]",
+    bgHeaderClass: "bg-[#CAA061]/20 text-[#855D21]",
+    bgSubtleClass: "bg-[#CAA061] text-white border-[#B98F52]",
+    accentBg: "bg-[#CAA061]",
+    accentHover: "hover:bg-[#B98F52]",
+    accentText: "text-white",
   },
   4: {
     name: "Lapangan 4",
     key: "court4",
     code: "c4",
-    badgeClass: "bg-sky-400/15 text-sky-200 border-sky-400/30",
-    borderClass: "border-sky-400/30",
-    textClass: "text-sky-200",
-    bgHeaderClass: "bg-sky-400/15 text-sky-200",
-    bgSubtleClass: "bg-sky-950/25 border-sky-400/20",
-    accentBg: "bg-sky-300",
-    accentHover: "hover:bg-sky-200",
-    accentText: "text-slate-900",
+    badgeClass: "bg-[#6B90B8] text-white border border-[#587EA6]",
+    borderClass: "border-[#6B90B8]/50",
+    textClass: "text-[#2D547D]",
+    bgHeaderClass: "bg-[#6B90B8]/20 text-[#2D547D]",
+    bgSubtleClass: "bg-[#6B90B8] text-white border-[#587EA6]",
+    accentBg: "bg-[#6B90B8]",
+    accentHover: "hover:bg-[#587EA6]",
+    accentText: "text-white",
   },
   5: {
     name: "Lapangan 5",
     key: "court5",
     code: "c5",
-    badgeClass: "bg-purple-400/15 text-purple-200 border-purple-400/30",
-    borderClass: "border-purple-400/30",
-    textClass: "text-purple-200",
-    bgHeaderClass: "bg-purple-400/15 text-purple-200",
-    bgSubtleClass: "bg-purple-950/25 border-purple-400/20",
-    accentBg: "bg-purple-300",
-    accentHover: "hover:bg-purple-200",
-    accentText: "text-slate-900",
+    badgeClass: "bg-[#967EB5] text-white border border-[#846AA6]",
+    borderClass: "border-[#967EB5]/50",
+    textClass: "text-[#5C427E]",
+    bgHeaderClass: "bg-[#967EB5]/20 text-[#5C427E]",
+    bgSubtleClass: "bg-[#967EB5] text-white border-[#846AA6]",
+    accentBg: "bg-[#967EB5]",
+    accentHover: "hover:bg-[#846AA6]",
+    accentText: "text-white",
   },
 };
 
@@ -3122,8 +3122,6 @@ export default function BadmintonRotationApp() {
   // State Modal Penyesuaian Biaya
   const [editingFeePlayer, setEditingFeePlayer] = useState<Player | null>(null);
 
-  const [showPlayerManager, setShowPlayerManager] = useState<boolean>(false);
-
   // State Pengeluaran & Finansial (Harga Lapangan & Shuttlecock)
   const [courtPrice, setCourtPrice] = useState<number>(62500);
   const [shuttlecockPrice, setShuttlecockPrice] = useState<number>(8500);
@@ -3135,8 +3133,8 @@ export default function BadmintonRotationApp() {
     courtNum: number;
   } | null>(null);
 
-  // State Tab Navigasi Menu: "pertandingan" | "spreadsheet"
-  const [activeTab, setActiveTab] = useState<"pertandingan" | "spreadsheet">("pertandingan");
+  // State Tab Navigasi Menu: "pertandingan" | "spreadsheet" | "pemain"
+  const [activeTab, setActiveTab] = useState<"pertandingan" | "spreadsheet" | "pemain">("pertandingan");
 
   // Ref untuk hidden file input (Import)
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -3197,20 +3195,45 @@ export default function BadmintonRotationApp() {
 
   const handleTogglePresent = useCallback((playerId: string) => {
     setPlayers((prev) => {
-      const maxArrival = prev
-        .filter((p) => p.isPresent)
-        .reduce((max, p) => Math.max(max, p.arrivalOrder), 0);
+      const target = prev.find((p) => p.id === playerId);
+      if (!target) return prev;
 
-      return prev.map((p) => {
-        if (p.id !== playerId) return p;
+      const nextPresent = !target.isPresent;
 
-        const nextPresent = !p.isPresent;
-        return {
-          ...p,
-          isPresent: nextPresent,
-          arrivalOrder: nextPresent ? maxArrival + 1 : 0,
-        };
-      });
+      if (nextPresent) {
+        // Pemain menjadi hadir: berikan arrivalOrder tertinggi saat ini + 1
+        const maxArrival = prev
+          .filter((p) => p.isPresent)
+          .reduce((max, p) => Math.max(max, p.arrivalOrder), 0);
+
+        return prev.map((p) =>
+          p.id === playerId
+            ? { ...p, isPresent: true, arrivalOrder: maxArrival + 1 }
+            : p
+        );
+      } else {
+        // Pemain menjadi tidak hadir: arrivalOrder = 0, lalu re-number yang hadir agar tidak ada celah
+        const updated = prev.map((p) =>
+          p.id === playerId
+            ? { ...p, isPresent: false, arrivalOrder: 0 }
+            : p
+        );
+
+        const presentSorted = updated
+          .filter((p) => p.isPresent)
+          .sort((a, b) => a.arrivalOrder - b.arrivalOrder);
+
+        const orderMap = new Map<string, number>();
+        presentSorted.forEach((p, idx) => {
+          orderMap.set(p.id, idx + 1);
+        });
+
+        return updated.map((p) =>
+          p.isPresent && orderMap.has(p.id)
+            ? { ...p, arrivalOrder: orderMap.get(p.id)! }
+            : p
+        );
+      }
     });
   }, []);
 
@@ -3259,15 +3282,50 @@ export default function BadmintonRotationApp() {
 
       setNewPlayerName("");
       setNewPlayerLevel(3);
-      setNewPlayerIsPresent(true);
+      // newPlayerIsPresent tetap mempertahankan pilihan terakhir user (tidak otomatis reset ke true)
     },
     [newPlayerName, newPlayerLevel, newPlayerIsPresent]
   );
 
-  const handleDeletePlayer = useCallback((playerId: string) => {
-    // Lindungi akun Admin agar tidak terhapus
-    setPlayers((prev) => prev.filter((p) => p.id !== playerId || p.isAdmin));
-  }, []);
+  const handleDeletePlayer = useCallback(
+    (playerId: string) => {
+      const target = players.find((p) => p.id === playerId);
+      if (!target || target.isAdmin) return;
+      if (confirm(`Hapus pemain "${target.name}"?`)) {
+        setPlayers((prev) => prev.filter((p) => p.id !== playerId || p.isAdmin));
+      }
+    },
+    [players]
+  );
+
+  const handleDeleteAllPlayers = useCallback(() => {
+    const nonAdminPlayers = players.filter((p) => !p.isAdmin);
+    if (nonAdminPlayers.length === 0) {
+      alert("Tidak ada pemain untuk dihapus (Admin/Host dilindungi).");
+      return;
+    }
+    if (
+      confirm(
+        `Apakah Anda yakin ingin menghapus semua (${nonAdminPlayers.length}) pemain? Akun Admin/Host tidak akan dihapus.`
+      )
+    ) {
+      setPlayers((prev) => prev.filter((p) => p.isAdmin));
+      setCustomFees((prev) => {
+        const nextFees: Record<string, number> = {};
+        players.filter((p) => p.isAdmin).forEach((admin) => {
+          if (prev[admin.id] !== undefined) nextFees[admin.id] = prev[admin.id];
+        });
+        return nextFees;
+      });
+      setPaymentStatuses((prev) => {
+        const nextStatuses: Record<string, "QRIS" | "Cash" | ""> = {};
+        players.filter((p) => p.isAdmin).forEach((admin) => {
+          if (prev[admin.id]) nextStatuses[admin.id] = prev[admin.id];
+        });
+        return nextStatuses;
+      });
+    }
+  }, [players]);
 
   const handleResetToPreset = useCallback(() => {
     if (confirm("Reset daftar pemain ke data contoh (termasuk Admin)?")) {
@@ -3522,6 +3580,25 @@ export default function BadmintonRotationApp() {
     return players
       .filter((p) => p.isPresent)
       .sort((a, b) => a.arrivalOrder - b.arrivalOrder);
+  }, [players]);
+
+  // Urutan pemain untuk tabel Kelola Pemain:
+  // Pemain yang hadir berada di atas (diurutkan berdasarkan urutan kedatangan arrivalOrder #1, #2...),
+  // disusul pemain yang belum hadir di bagian bawah (sesuai urutan registrasi).
+  const sortedPlayers = useMemo(() => {
+    return [...players].sort((a, b) => {
+      // Yang hadir selalu berada di atas yang belum hadir
+      if (a.isPresent && !b.isPresent) return -1;
+      if (!a.isPresent && b.isPresent) return 1;
+
+      // Jika sama-sama hadir, urutkan berdasarkan arrivalOrder ascending
+      if (a.isPresent && b.isPresent) {
+        return a.arrivalOrder - b.arrivalOrder;
+      }
+
+      // Jika sama-sama belum hadir, pertahankan urutan aslinya
+      return 0;
+    });
   }, [players]);
 
   const playerMap = useMemo(() => {
@@ -3846,11 +3923,11 @@ export default function BadmintonRotationApp() {
   }, [selectedMatchIdx, projections]);
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 font-sans selection:bg-emerald-400 selection:text-slate-950">
+    <div className="min-h-screen bg-[#BFCCDC] text-slate-800 font-sans selection:bg-emerald-400 selection:text-slate-950">
       {/* =====================================================================
           HEADER & BRANDING
       ====================================================================== */}
-      <header className="border-b border-slate-700/60 bg-slate-850/90 backdrop-blur-xl sticky top-0 z-30">
+      <header className="border-b border-slate-600/40 bg-[#3B4758] backdrop-blur-xl sticky top-0 z-30 shadow-md">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl overflow-hidden border border-emerald-400/30 flex items-center justify-center bg-slate-900 shadow-sm shrink-0">
@@ -3863,7 +3940,7 @@ export default function BadmintonRotationApp() {
             <div>
               <h1 className="text-base font-bold tracking-tight text-white flex items-center gap-2">
                 DaySmash
-                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-400/15 text-emerald-300 border border-emerald-400/30 uppercase tracking-wider">
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#357564] text-[#A7F3D0] border border-[#43917C] uppercase tracking-wider">
                   Badminton
                 </span>
               </h1>
@@ -3871,13 +3948,13 @@ export default function BadmintonRotationApp() {
           </div>
 
           {/* Menu Navigasi Utama */}
-          <div className="flex items-center bg-slate-800/80 p-1 rounded-xl border border-slate-700/60 shadow-sm">
+          <div className="flex items-center bg-[#2E3947] p-1 rounded-xl border border-slate-600/40 shadow-sm">
             <button
               type="button"
               onClick={() => setActiveTab("pertandingan")}
               className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
                 activeTab === "pertandingan"
-                  ? "bg-emerald-400/90 text-slate-950 shadow-sm font-black"
+                  ? "bg-[#7ED1B3] text-[#133E32] shadow-sm font-black"
                   : "text-slate-300 hover:text-white"
               }`}
             >
@@ -3885,7 +3962,7 @@ export default function BadmintonRotationApp() {
               <span
                 className={`text-[10px] px-1.5 py-0.2 rounded-md ${
                   activeTab === "pertandingan"
-                    ? "bg-slate-950/20 text-slate-950 font-mono font-bold"
+                    ? "bg-[#133E32]/20 text-[#133E32] font-mono font-bold"
                     : "bg-slate-700/80 text-slate-300 font-mono"
                 }`}
               >
@@ -3897,36 +3974,56 @@ export default function BadmintonRotationApp() {
               onClick={() => setActiveTab("spreadsheet")}
               className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
                 activeTab === "spreadsheet"
-                  ? "bg-emerald-400/90 text-slate-950 shadow-sm font-black"
+                  ? "bg-[#7ED1B3] text-[#133E32] shadow-sm font-black"
                   : "text-slate-300 hover:text-white"
               }`}
             >
               <span>📊 Rotasi Pemain</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("pemain")}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+                activeTab === "pemain"
+                  ? "bg-[#7ED1B3] text-[#133E32] shadow-sm font-black"
+                  : "text-slate-300 hover:text-white"
+              }`}
+            >
+              <span>👥 Kelola Pemain</span>
+              <span
+                className={`text-[10px] px-1.5 py-0.2 rounded-md ${
+                  activeTab === "pemain"
+                    ? "bg-[#133E32]/20 text-[#133E32] font-mono font-bold"
+                    : "bg-slate-700/80 text-slate-300 font-mono"
+                }`}
+              >
+                {players.length}
+              </span>
             </button>
           </div>
 
           {/* Quick Actions & Setting Proyeksi & Lapangan */}
           <div className="flex flex-wrap items-center gap-2.5">
             {/* Setting Proyeksi Match (1 s/d 18 Match) */}
-            <div className="flex items-center bg-slate-800/80 border border-slate-700/60 rounded-xl px-2 py-1 gap-1 shadow-sm">
-              <span className="text-xs text-slate-400 font-medium mr-1">Match:</span>
+            <div className="flex items-center bg-[#4C586B] border border-slate-500/50 rounded-xl px-2 py-1 gap-1 shadow-sm">
+              <span className="text-xs text-slate-200 font-medium mr-1">Match:</span>
               <button
                 type="button"
                 onClick={() => setProjectedMatchCount((prev) => Math.max(1, prev - 1))}
                 disabled={projectedMatchCount <= 1}
-                className="w-5 h-5 rounded bg-slate-900 hover:bg-slate-700 disabled:opacity-30 border border-slate-700 text-white font-bold flex items-center justify-center text-xs transition cursor-pointer"
+                className="w-5 h-5 rounded bg-[#333E4D] hover:bg-[#2A3442] disabled:opacity-30 border border-slate-600 text-white font-bold flex items-center justify-center text-xs transition cursor-pointer"
                 title="Kurangi proyeksi match"
               >
                 -
               </button>
-              <span className="w-5 text-center text-xs font-bold text-emerald-300 font-mono">
+              <span className="w-5 text-center text-xs font-bold text-[#7ED1B3] font-mono">
                 {projectedMatchCount}
               </span>
               <button
                 type="button"
                 onClick={() => setProjectedMatchCount((prev) => Math.min(18, prev + 1))}
                 disabled={projectedMatchCount >= 18}
-                className="w-5 h-5 rounded bg-slate-900 hover:bg-slate-700 disabled:opacity-30 border border-slate-700 text-white font-bold flex items-center justify-center text-xs transition cursor-pointer"
+                className="w-5 h-5 rounded bg-[#333E4D] hover:bg-[#2A3442] disabled:opacity-30 border border-slate-600 text-white font-bold flex items-center justify-center text-xs transition cursor-pointer"
                 title="Tambah proyeksi match"
               >
                 +
@@ -3934,44 +4031,30 @@ export default function BadmintonRotationApp() {
             </div>
 
             {/* Setting Jumlah Lapangan (1 s/d 5 Lapangan) */}
-            <div className="flex items-center bg-slate-800/80 border border-slate-700/60 rounded-xl px-2 py-1 gap-1 shadow-sm">
-              <span className="text-xs text-slate-400 font-medium mr-1">Lap:</span>
+            <div className="flex items-center bg-[#4C586B] border border-slate-500/50 rounded-xl px-2 py-1 gap-1 shadow-sm">
+              <span className="text-xs text-slate-200 font-medium mr-1">Lap:</span>
               <button
                 type="button"
                 onClick={() => setCourtCount((prev) => Math.max(1, prev - 1))}
                 disabled={courtCount <= 1}
-                className="w-5 h-5 rounded bg-slate-900 hover:bg-slate-700 disabled:opacity-30 border border-slate-700 text-white font-bold flex items-center justify-center text-xs transition"
+                className="w-5 h-5 rounded bg-[#333E4D] hover:bg-[#2A3442] disabled:opacity-30 border border-slate-600 text-white font-bold flex items-center justify-center text-xs transition cursor-pointer"
                 title="Kurangi lapangan"
               >
                 -
               </button>
-              <span className="w-4 text-center text-xs font-bold text-emerald-300 font-mono">
+              <span className="w-4 text-center text-xs font-bold text-[#7ED1B3] font-mono">
                 {courtCount}
               </span>
               <button
                 type="button"
                 onClick={() => setCourtCount((prev) => Math.min(5, prev + 1))}
                 disabled={courtCount >= 5}
-                className="w-5 h-5 rounded bg-slate-900 hover:bg-slate-700 disabled:opacity-30 border border-slate-700 text-white font-bold flex items-center justify-center text-xs transition"
+                className="w-5 h-5 rounded bg-[#333E4D] hover:bg-[#2A3442] disabled:opacity-30 border border-slate-600 text-white font-bold flex items-center justify-center text-xs transition cursor-pointer"
                 title="Tambah lapangan"
               >
                 +
               </button>
             </div>
-
-            <button
-              onClick={() => setShowPlayerManager(!showPlayerManager)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition flex items-center gap-1.5 ${
-                showPlayerManager
-                  ? "bg-slate-700 border-slate-600 text-white"
-                  : "bg-slate-800/80 border-slate-700/60 text-slate-300 hover:bg-slate-700"
-              }`}
-            >
-              <span>👥 Kelola Pemain</span>
-              <span className="px-1.5 py-0.2 rounded-full bg-emerald-400/20 text-emerald-300 text-[10px] font-mono font-bold">
-                {players.length}
-              </span>
-            </button>
 
             {stats.completedCourtCount > 0 && (
               <button
@@ -3985,7 +4068,7 @@ export default function BadmintonRotationApp() {
                     setCompletedCourts({});
                   }
                 }}
-                className="px-2.5 py-1.5 rounded-xl text-xs font-medium bg-emerald-400/10 border border-emerald-400/25 text-emerald-300 hover:bg-emerald-400/20 transition flex items-center gap-1"
+                className="px-2.5 py-1.5 rounded-xl text-xs font-medium bg-emerald-500/20 border border-emerald-400/40 text-emerald-200 hover:bg-emerald-500/30 transition flex items-center gap-1"
                 title="Buka kunci semua match selesai"
               >
                 <span>Reset {stats.completedCourtCount} Selesai</span>
@@ -3995,7 +4078,7 @@ export default function BadmintonRotationApp() {
             {stats.overrideCount > 0 && (
               <button
                 onClick={handleClearAllOverrides}
-                className="px-2.5 py-1.5 rounded-xl text-xs font-medium bg-amber-400/10 border border-amber-400/25 text-amber-200 hover:bg-amber-400/20 transition flex items-center gap-1"
+                className="px-2.5 py-1.5 rounded-xl text-xs font-medium bg-amber-500/20 border border-amber-400/40 text-amber-200 hover:bg-amber-500/30 transition flex items-center gap-1"
               >
                 <span>Reset {stats.overrideCount} Override</span>
               </button>
@@ -4004,28 +4087,20 @@ export default function BadmintonRotationApp() {
             {stats.customFeeCount > 0 && (
               <button
                 onClick={() => setCustomFees({})}
-                className="px-2.5 py-1.5 rounded-xl text-xs font-medium bg-purple-400/10 border border-purple-400/25 text-purple-200 hover:bg-purple-400/20 transition flex items-center gap-1"
+                className="px-2.5 py-1.5 rounded-xl text-xs font-medium bg-purple-500/20 border border-purple-400/40 text-purple-200 hover:bg-purple-500/30 transition flex items-center gap-1"
                 title="Reset diskon"
               >
                 <span>Reset Diskon</span>
               </button>
             )}
 
-            <button
-              onClick={handleResetToPreset}
-              className="px-2.5 py-1.5 rounded-xl text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 transition"
-              title="Reset ke data contoh"
-            >
-              Data Contoh
-            </button>
-
             {/* Separator */}
-            <div className="w-px h-5 bg-slate-700/50" />
+            <div className="w-px h-5 bg-slate-500/40" />
 
             {/* Export Data */}
             <button
               onClick={handleExportData}
-              className="px-2.5 py-1.5 rounded-xl text-xs font-medium bg-sky-400/10 border border-sky-400/25 text-sky-300 hover:bg-sky-400/20 transition flex items-center gap-1"
+              className="px-2.5 py-1.5 rounded-xl text-xs font-medium bg-[#506B88] border border-[#6583A2] text-[#DCEAF7] hover:bg-[#435C77] transition flex items-center gap-1"
               title="Export data sesi ke file JSON"
             >
               <span>📥 Export</span>
@@ -4034,7 +4109,7 @@ export default function BadmintonRotationApp() {
             {/* Import Data */}
             <button
               onClick={() => importInputRef.current?.click()}
-              className="px-2.5 py-1.5 rounded-xl text-xs font-medium bg-sky-400/10 border border-sky-400/25 text-sky-300 hover:bg-sky-400/20 transition flex items-center gap-1"
+              className="px-2.5 py-1.5 rounded-xl text-xs font-medium bg-[#506B88] border border-[#6583A2] text-[#DCEAF7] hover:bg-[#435C77] transition flex items-center gap-1"
               title="Import data sesi dari file JSON"
             >
               <span>📤 Import</span>
@@ -4051,7 +4126,7 @@ export default function BadmintonRotationApp() {
             {/* Sesi Mabar Baru */}
             <button
               onClick={handleNewSession}
-              className="px-2.5 py-1.5 rounded-xl text-xs font-medium bg-rose-400/10 border border-rose-400/25 text-rose-300 hover:bg-rose-400/20 transition flex items-center gap-1"
+              className="px-2.5 py-1.5 rounded-xl text-xs font-medium bg-[#784E5E] border border-[#8F5F72] text-[#FCD5DE] hover:bg-[#683E4E] transition flex items-center gap-1"
               title="Mulai sesi mabar baru (hapus semua data)"
             >
               <span>🔄 Sesi Baru</span>
@@ -4062,79 +4137,53 @@ export default function BadmintonRotationApp() {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 space-y-5">
         {/* ===================================================================
-            KPI & STATUS BAR (3 KOLOM BERSIH & PASTEL)
+            KPI & STATUS BAR (2 KOLOM SIMETRIS & PASTEL BERSIH)
         ==================================================================== */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {/* KPI 1: Pemain Hadir */}
-          <div className="bg-slate-800/70 border border-slate-700/50 rounded-2xl p-4 flex items-center gap-3.5 shadow-sm">
-            <div className="w-10 h-10 rounded-xl bg-emerald-400/15 border border-emerald-400/30 flex items-center justify-center text-emerald-300 text-lg font-bold">
+          <div className="bg-[#E7EEF4] border border-white/80 rounded-2xl p-4 flex items-center gap-3.5 shadow-sm">
+            <div className="w-10 h-10 rounded-xl bg-[#C1DED9] border border-[#A5D0C8] flex items-center justify-center text-[#236858] text-lg font-bold">
               ✓
             </div>
             <div>
-              <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+              <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                 Pemain Hadir
               </div>
-              <div className="text-xl font-bold text-slate-100">
+              <div className="text-xl font-bold text-slate-800">
                 {stats.totalPresent}{" "}
-                <span className="text-xs font-normal text-slate-400">
+                <span className="text-xs font-normal text-slate-500">
                   / {players.length} Terdaftar
                 </span>
               </div>
             </div>
           </div>
 
-          {/* KPI 2: Status Lapangan & Progres Match */}
-          <div className="bg-slate-800/70 border border-slate-700/50 rounded-2xl p-4 flex items-center gap-3.5 shadow-sm">
-            <div
-              className={`w-10 h-10 rounded-xl border flex items-center justify-center text-lg font-bold ${
-                stats.activeCourts >= 2
-                  ? "bg-purple-400/15 border-purple-400/30 text-purple-200"
-                  : stats.activeCourts === 1
-                  ? "bg-emerald-400/15 border-emerald-400/30 text-emerald-200"
-                  : "bg-slate-800 border-slate-700 text-slate-400"
-              }`}
-            >
-              🏸
-            </div>
-            <div>
-              <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                Lapangan &amp; Progres
-              </div>
-              <div className="text-sm font-bold text-slate-100 truncate max-w-[200px]">
-                {stats.courtStatus}
-              </div>
-              <div className="text-[11px] text-emerald-300 font-medium mt-0.5">
-                {stats.completedCourtCount} dari {stats.totalCourtMatches} Lapangan Selesai
-              </div>
-            </div>
-          </div>
-
-          {/* KPI 3: Total Shuttlecock & Kas Tagihan (Klik untuk Laporan Keuangan) */}
+          {/* KPI 2: Total Shuttlecock & Kas Tagihan (Klik untuk Laporan Keuangan) */}
           <div
             onClick={() => setIsFinanceModalOpen(true)}
             role="button"
             tabIndex={0}
             title="Klik untuk melihat rincian pemasukan, pengeluaran & keuntungan bersih"
-            className="bg-slate-800/70 hover:bg-slate-800 border border-slate-700/50 hover:border-amber-400/40 rounded-2xl p-4 flex items-center justify-between shadow-sm cursor-pointer transition group"
+            className="bg-[#E7EEF4] hover:bg-[#DFE7EF] border border-white/80 rounded-2xl p-4 flex items-center justify-between shadow-sm cursor-pointer transition group"
           >
             <div className="flex items-center gap-3.5">
-              <div className="w-10 h-10 rounded-xl bg-amber-400/15 group-hover:bg-amber-400/25 border border-amber-400/30 group-hover:border-amber-400/50 flex items-center justify-center text-amber-200 text-lg font-bold transition">
+              <div className="w-10 h-10 rounded-xl bg-[#EFE8D1] group-hover:bg-[#EAE1C4] border border-[#E0D4B1] flex items-center justify-center text-lg font-bold transition">
                 💰
               </div>
               <div>
-                <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
                   <span>Total Iuran Kas</span>
-                  <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-400/20 text-amber-300 font-bold group-hover:bg-amber-400/30 transition">
+                  <span className="text-[10px] px-1.5 py-0.2 rounded bg-[#DDD3B3] text-[#6E5F2A] font-bold group-hover:bg-[#D5C9A3] transition">
                     Laporan ↗
                   </span>
                 </div>
-                <div className="text-xl font-bold text-emerald-300">
+                <div className="text-xl font-bold text-[#1E745A]">
                   Rp {totalKas.toLocaleString("id-ID")}
                 </div>
-                <div className="text-[11px] text-slate-400 flex items-center gap-2 mt-0.5">
+                <div className="text-[11px] text-slate-500 flex items-center gap-2 mt-0.5">
                   <span>{totalSessionShuttlecocks} Cock</span>
                   <span>·</span>
-                  <span className="text-emerald-300 font-medium">
+                  <span className="text-[#1E745A] font-semibold">
                     Bayar: {stats.totalPaidCount}/{stats.regularPresent}
                   </span>
                 </div>
@@ -4144,288 +4193,25 @@ export default function BadmintonRotationApp() {
         </div>
 
         {/* ===================================================================
-            DRAWER / PANEL KELOLA PEMAIN (TAMBAH, LEVEL, & UBAH STATUS)
-        ==================================================================== */}
-        {showPlayerManager && (
-          <div className="bg-slate-800/70 border border-slate-700/60 rounded-2xl p-5 space-y-4 shadow-sm animate-in fade-in duration-200">
-            <div className="flex items-center justify-between border-b border-slate-700/60 pb-3">
-              <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2">
-                <span>👥 Kelola Pemain ({players.length} Terdaftar)</span>
-              </h2>
-            </div>
-
-            {/* Form Tambah Pemain Baru */}
-            <form
-              onSubmit={handleAddPlayer}
-              className="bg-slate-950/70 border border-slate-800 rounded-xl p-4 flex flex-wrap items-end gap-3"
-            >
-              <div className="flex-1 min-w-[200px]">
-                <label className="block text-xs font-semibold text-slate-400 mb-1">
-                  Nama Pemain
-                </label>
-                <input
-                  type="text"
-                  placeholder="Contoh: Taufik Hidayat"
-                  value={newPlayerName}
-                  onChange={(e) => setNewPlayerName(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-
-              <div className="w-28">
-                <label className="block text-xs font-semibold text-slate-400 mb-1">
-                  Level (1 - 5)
-                </label>
-                <select
-                  value={newPlayerLevel}
-                  onChange={(e) => setNewPlayerLevel(Number(e.target.value))}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
-                >
-                  <option value={5}>Lvl 5 (Mahir)</option>
-                  <option value={4}>Lvl 4 (Atas)</option>
-                  <option value={3}>Lvl 3 (Menengah)</option>
-                  <option value={2}>Lvl 2 (Dasar)</option>
-                  <option value={1}>Lvl 1 (Pemula)</option>
-                </select>
-              </div>
-
-              <div className="flex items-center gap-2 pb-2">
-                <input
-                  type="checkbox"
-                  id="new-present"
-                  checked={newPlayerIsPresent}
-                  onChange={(e) => setNewPlayerIsPresent(e.target.checked)}
-                  className="w-4 h-4 rounded border-slate-700 text-emerald-500 focus:ring-emerald-500 accent-emerald-500"
-                />
-                <label
-                  htmlFor="new-present"
-                  className="text-xs font-medium text-slate-300 cursor-pointer"
-                >
-                  Langsung Hadir
-                </label>
-              </div>
-
-              <button
-                type="submit"
-                className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-xl text-xs font-black transition shadow-lg shadow-emerald-500/20"
-              >
-                + Tambah Pemain
-              </button>
-            </form>
-
-            {/* Tabel Daftar Pemain Terdaftar */}
-            <div className="overflow-x-auto rounded-xl border border-slate-800">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-950/80 text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-800">
-                  <tr>
-                    <th className="py-2.5 px-4 w-16 text-center">Hadir</th>
-                    <th className="py-2.5 px-4 w-20 text-center">Urutan</th>
-                    <th className="py-2.5 px-4 min-w-[200px]">Nama Pemain (Live Edit)</th>
-                    <th className="py-2.5 px-4 w-36 text-center">Level (Live Edit)</th>
-                    <th className="py-2.5 px-4 w-32 text-center">Main / Cock</th>
-                    <th className="py-2.5 px-4 w-40 text-right">Biaya Bayar (Edit)</th>
-                    <th className="py-2.5 px-4 w-20 text-right">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/60 bg-slate-900/50">
-                  {players.map((player) => {
-                    const pStats = playerStatsMap.get(player.id);
-                    return (
-                      <tr
-                        key={player.id}
-                        className={`hover:bg-slate-800/40 transition ${
-                          player.isAdmin
-                            ? "bg-purple-950/20 border-l-2 border-purple-500"
-                            : player.isPresent
-                            ? "bg-emerald-950/10"
-                            : "opacity-60"
-                        }`}
-                      >
-                        <td className="py-2 px-4 text-center">
-                          <input
-                            type="checkbox"
-                            checked={player.isPresent}
-                            onChange={() => handleTogglePresent(player.id)}
-                            className="w-4 h-4 rounded border-slate-700 text-emerald-500 focus:ring-emerald-500 accent-emerald-500 cursor-pointer"
-                          />
-                        </td>
-                        <td className="py-2 px-4 text-center font-mono">
-                          {player.isPresent ? (
-                            <span
-                              className={`px-2 py-0.5 rounded-full font-bold ${
-                                player.isAdmin
-                                  ? "bg-purple-500/20 text-purple-300 border border-purple-500/30"
-                                  : "bg-emerald-500/20 text-emerald-400"
-                              }`}
-                            >
-                              #{player.arrivalOrder}
-                            </span>
-                          ) : (
-                            <span className="text-slate-400">-</span>
-                          )}
-                        </td>
-                        <td className="py-2 px-4 font-semibold text-white">
-                          <div className="flex items-center gap-1.5">
-                            {player.isAdmin && (
-                              <span className="px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[10px] font-black shrink-0">
-                                👑 ADMIN
-                              </span>
-                            )}
-                            <div className="relative flex-1 min-w-[150px]">
-                              <input
-                                type="text"
-                                value={player.name}
-                                onChange={(e) =>
-                                  handleUpdatePlayerName(player.id, e.target.value)
-                                }
-                                className="w-full bg-slate-900/80 hover:bg-slate-900 focus:bg-slate-950 border border-slate-700 hover:border-slate-500 focus:border-emerald-500 rounded-lg px-2.5 py-1 text-xs font-semibold text-white focus:outline-none transition shadow-inner"
-                                placeholder="Nama pemain..."
-                                title="Klik untuk mengedit nama pemain langsung"
-                              />
-                            </div>
-                          </div>
-                        </td>
-                        <td className="py-2 px-4 text-center">
-                          {player.isAdmin ? (
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold bg-purple-400/15 text-purple-200 border border-purple-400/30 font-mono">
-                              👑 Host
-                            </span>
-                          ) : (
-                            <select
-                              value={player.level ?? 1}
-                              onChange={(e) =>
-                                handleUpdatePlayerLevel(
-                                  player.id,
-                                  Number(e.target.value)
-                                )
-                              }
-                              className="bg-slate-900 border border-slate-700 hover:border-emerald-500 rounded-lg px-2 py-1 text-xs font-bold text-white focus:outline-none cursor-pointer transition"
-                              title="Ubah level pemain (otomatis menghitung ulang match berikutnya secara real-time)"
-                            >
-                              <option value={5}>Level 5 (Mahir)</option>
-                              <option value={4}>Level 4 (Atas)</option>
-                              <option value={3}>Level 3 (Menengah)</option>
-                              <option value={2}>Level 2 (Dasar)</option>
-                              <option value={1}>Level 1 (Pemula)</option>
-                            </select>
-                          )}
-                        </td>
-                        <td className="py-2 px-4 text-center font-mono text-slate-300">
-                          {player.isPresent ? (
-                            <div>
-                              <span>
-                                {pStats?.matchesPlayed || 0}m /{" "}
-                                <strong className="text-emerald-400 font-bold">
-                                  {pStats?.shuttlecockCount || 0}🏸
-                                </strong>
-                                <span className="text-[10px] text-slate-500 block">
-                                  ({Array.from({ length: courtCount }, (_, i) => `c${i + 1}: ${pStats?.courtBreakdown?.[`c${i + 1}`] || 0}`).join(", ")})
-                                </span>
-                              </span>
-                              <div className="mt-1 flex items-center justify-center gap-1">
-                                <span
-                                  className={`inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[10px] font-semibold border ${
-                                    (refereeStats[player.id] || 0) > 0
-                                      ? "bg-amber-400/15 text-amber-300 border-amber-400/35"
-                                      : "bg-slate-900/60 text-slate-500 border-slate-800"
-                                  }`}
-                                  title={`Total bertugas sebagai wasit: ${refereeStats[player.id] || 0} kali`}
-                                >
-                                  <span>⚖️</span>
-                                  <span>{refereeStats[player.id] || 0}x wasit</span>
-                                </span>
-                              </div>
-                            </div>
-                          ) : (
-                            <span className="text-slate-400">-</span>
-                          )}
-                        </td>
-                        <td className="py-2 px-4 text-right font-mono font-bold">
-                          {player.isAdmin ? (
-                            <div className="flex flex-col items-end">
-                              <span className="text-purple-400 text-xs font-black">
-                                {pStats?.isCustom
-                                  ? `Rp ${pStats?.fee.toLocaleString("id-ID")}`
-                                  : "GRATIS (Host)"}
-                              </span>
-                              <span className="text-[10px] text-slate-500 font-normal">
-                                Bebas Iuran
-                              </span>
-                            </div>
-                          ) : player.isPresent ? (
-                            <div className="flex flex-col items-end">
-                              <div className="flex items-center gap-1.5">
-                                <button
-                                  type="button"
-                                  onClick={() => setEditingFeePlayer(player)}
-                                  className="text-emerald-400 hover:text-emerald-300 text-xs flex items-center gap-1 transition"
-                                  title="Klik untuk ubah biaya manual / beri diskon"
-                                >
-                                  <span>Rp {pStats?.fee.toLocaleString("id-ID")}</span>
-                                  <span className="text-[10px] text-slate-500">✏️</span>
-                                </button>
-                                {pStats?.isCustom && (
-                                  <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold">
-                                    Diskon
-                                  </span>
-                                )}
-                              </div>
-                              <span className="text-[10px] text-slate-500 font-normal">
-                                {pStats?.isCustom
-                                  ? `Auto: Rp ${pStats?.autoFee.toLocaleString("id-ID")}`
-                                  : `11k + 3k×${pStats?.shuttlecockCount}`}
-                              </span>
-                            </div>
-                          ) : (
-                            <span className="text-slate-400 text-xs font-normal">
-                              - (Tidak Hadir)
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-2 px-4 text-right">
-                          {player.isAdmin ? (
-                            <span className="text-slate-600 text-xs select-none" title="Admin tidak dapat dihapus">
-                              🔒
-                            </span>
-                          ) : (
-                            <button
-                              onClick={() => handleDeletePlayer(player.id)}
-                              className="text-slate-400 hover:text-rose-400 transition text-xs p-1"
-                              title="Hapus Pemain"
-                            >
-                              🗑️
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* ===================================================================
             MENU TAB SWITCHER (DESKTOP & MOBILE)
         ==================================================================== */}
         <div className="flex items-center justify-between flex-wrap gap-3 pb-1">
-          <div className="flex items-center bg-slate-900/90 p-1.5 rounded-2xl border border-slate-800 shadow-sm">
+          <div className="flex items-center bg-[#E5ECF2] p-1.5 rounded-2xl border border-white/80 shadow-sm">
             <button
               type="button"
               onClick={() => setActiveTab("pertandingan")}
               className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 ${
                 activeTab === "pertandingan"
-                  ? "bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20 font-black"
-                  : "text-slate-400 hover:text-white hover:bg-slate-800/60"
+                  ? "bg-[#9FE3D0] text-[#133E32] shadow-sm font-black"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
               }`}
             >
               <span>🏸 Pertandingan</span>
               <span
                 className={`text-[11px] px-2 py-0.5 rounded-full font-mono font-bold ${
                   activeTab === "pertandingan"
-                    ? "bg-slate-950/20 text-slate-950"
-                    : "bg-slate-700 text-slate-300 font-mono"
+                    ? "bg-[#133E32]/15 text-[#133E32]"
+                    : "bg-slate-300/70 text-slate-700 font-mono"
                 }`}
               >
                 M1-M{projectedMatchCount}
@@ -4435,13 +4221,34 @@ export default function BadmintonRotationApp() {
             <button
               type="button"
               onClick={() => setActiveTab("spreadsheet")}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 ${
                 activeTab === "spreadsheet"
-                  ? "bg-emerald-400/90 text-slate-950 shadow-sm font-black"
-                  : "text-slate-300 hover:text-white hover:bg-slate-750"
+                  ? "bg-[#9FE3D0] text-[#133E32] shadow-sm font-black"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
               }`}
             >
               <span>📊 Rotasi Pemain</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("pemain")}
+              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 ${
+                activeTab === "pemain"
+                  ? "bg-[#9FE3D0] text-[#133E32] shadow-sm font-black"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
+              }`}
+            >
+              <span>👥 Kelola Pemain</span>
+              <span
+                className={`text-[11px] px-2 py-0.5 rounded-full font-mono font-bold ${
+                  activeTab === "pemain"
+                    ? "bg-[#133E32]/15 text-[#133E32]"
+                    : "bg-slate-300/70 text-slate-700 font-mono"
+                }`}
+              >
+                {players.length}
+              </span>
             </button>
           </div>
         </div>
@@ -4450,18 +4257,18 @@ export default function BadmintonRotationApp() {
             KONTEN TAMPILAN: TABEL PERTANDINGAN ATAU SPREADSHEET
         ==================================================================== */}
         {activeTab === "pertandingan" ? (
-          <section className="bg-slate-800/70 border border-slate-700/60 rounded-2xl shadow-sm overflow-hidden animate-in fade-in duration-200">
+          <section className="bg-[#E7EEF4] border border-white/80 rounded-2xl shadow-sm overflow-hidden animate-in fade-in duration-200">
             {/* Header Tabel Pertandingan */}
-            <div className="p-4 sm:px-5 border-b border-slate-700/60 flex items-center justify-between gap-3 bg-slate-850/60">
-              <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2">
+            <div className="p-4 sm:px-5 border-b border-slate-300/70 flex items-center justify-between gap-3 bg-[#DFE7EF]/80">
+              <h2 className="text-sm font-bold text-slate-800 flex items-center gap-2">
                 <span>🏸 Pertandingan (M1 s/d M{projectedMatchCount})</span>
               </h2>
 
               <div className="flex items-center gap-2 text-xs">
-                <span className="px-2.5 py-1 rounded-lg bg-emerald-400/15 border border-emerald-400/30 text-emerald-200 font-medium">
+                <span className="px-2.5 py-1 rounded-lg bg-emerald-100 border border-emerald-300 text-emerald-800 font-medium">
                   {stats.completedCourtCount} Selesai
                 </span>
-                <span className="px-2.5 py-1 rounded-lg bg-slate-800/80 border border-slate-700 text-slate-400 font-medium">
+                <span className="px-2.5 py-1 rounded-lg bg-white/80 border border-slate-300 text-slate-600 font-medium">
                   {stats.totalCourtMatches - stats.completedCourtCount} Belum
                 </span>
               </div>
@@ -4471,7 +4278,7 @@ export default function BadmintonRotationApp() {
             <div className="overflow-x-auto">
               <table className="w-full border-collapse text-left">
                 <thead>
-                  <tr className="bg-slate-850/80 border-b border-slate-700/60 text-slate-300 uppercase tracking-wider text-[11px] font-semibold">
+                  <tr className="bg-[#DFE7EF] border-b border-slate-300/70 text-slate-600 uppercase tracking-wider text-[11px] font-semibold">
                     <th className="py-3 px-4 w-20 text-center">Match</th>
                     <th className="py-3 px-4 w-40">Lapangan</th>
                     <th className="py-3 px-4 min-w-[300px]">Pertandingan (Siapa vs Siapa)</th>
@@ -4480,11 +4287,19 @@ export default function BadmintonRotationApp() {
                     <th className="py-3 px-4 w-28 text-center">Aksi</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-700/40">
+                <tbody className="divide-y divide-slate-200/80 bg-white/80">
                   {presentPlayers.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="py-12 text-center text-slate-400 italic text-sm">
-                        Belum ada pemain yang berstatus hadir. Buka panel &quot;Kelola Pemain&quot; untuk mencentang kehadiran.
+                        Belum ada pemain yang berstatus hadir.{" "}
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab("pemain")}
+                          className="text-emerald-600 underline font-semibold hover:text-emerald-500 cursor-pointer not-italic"
+                        >
+                          Buka tab Kelola Pemain
+                        </button>{" "}
+                        untuk mencentang kehadiran.
                       </td>
                     </tr>
                   ) : (
@@ -4529,8 +4344,8 @@ export default function BadmintonRotationApp() {
                             key={`m${proj.matchIndex}-c${cNum}`}
                             className={`transition-all duration-200 ${
                               isCourtCompleted
-                                ? "bg-slate-900/85 hover:bg-slate-900 border-l-4 border-l-emerald-400 shadow-inner"
-                                : "hover:bg-slate-750/30 border-l-4 border-l-transparent"
+                                ? "bg-emerald-50/60 hover:bg-emerald-50/90 border-l-4 border-l-emerald-500 shadow-inner"
+                                : "hover:bg-slate-100/60 border-l-4 border-l-transparent"
                             }`}
                           >
                             {/* Kolom Match */}
@@ -4540,13 +4355,13 @@ export default function BadmintonRotationApp() {
                                 onClick={() => setSelectedMatchIdx(proj.matchIndex)}
                                 className={`inline-flex items-center justify-center gap-1 font-mono font-bold text-xs px-2.5 py-1 rounded-md border transition ${
                                   isCourtCompleted
-                                    ? "bg-emerald-500/20 text-emerald-200 border-emerald-400/40 hover:bg-emerald-500/30 shadow-sm"
-                                    : "bg-slate-800 text-emerald-300 border-slate-700 hover:border-slate-600"
+                                    ? "bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200 shadow-sm"
+                                    : "bg-white text-slate-700 border-slate-300 hover:border-slate-400"
                                 }`}
                                 title={`Lihat detail seluruh Match ${proj.matchIndex}`}
                               >
                                 {isCourtCompleted && (
-                                  <span className="text-emerald-300 text-[11px] font-black leading-none">✓</span>
+                                  <span className="text-emerald-700 text-[11px] font-black leading-none">✓</span>
                                 )}
                                 <span>M{proj.matchIndex}</span>
                               </button>
@@ -4560,12 +4375,12 @@ export default function BadmintonRotationApp() {
                                     isCourtCompleted ? `${theme.badgeClass} opacity-85` : theme.badgeClass
                                   }`}
                                 >
-                                  <span className={`w-1.5 h-1.5 rounded-full ${theme.accentBg}`}></span>
+                                  <span className="w-1.5 h-1.5 rounded-full bg-white"></span>
                                   {theme.name}
                                 </span>
                                 {isCourtCompleted && (
                                   <span
-                                    className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold"
+                                    className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold"
                                     title="Pertandingan lapangan ini sudah selesai"
                                   >
                                     Selesai
@@ -4573,7 +4388,7 @@ export default function BadmintonRotationApp() {
                                 )}
                                 {isCourtOverridden && (
                                   <span
-                                    className="text-[10px] px-1.5 py-0.5 rounded bg-amber-400/15 text-amber-200 border border-amber-400/30 font-semibold"
+                                    className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300 font-semibold"
                                     title="Formasi lapangan ini diedit secara manual"
                                   >
                                     Override
@@ -4597,12 +4412,12 @@ export default function BadmintonRotationApp() {
                                           : "font-bold"
                                       }`}
                                     >
-                                      <span className={courtResult?.losingTeam === "teamA" ? "text-slate-300 line-through decoration-slate-600 inline-flex items-center gap-0.5" : "text-emerald-300 inline-flex items-center gap-0.5"}>
+                                      <span className={courtResult?.losingTeam === "teamA" ? "text-slate-400 line-through decoration-slate-400 inline-flex items-center gap-0.5" : "text-slate-800 inline-flex items-center gap-0.5 font-bold"}>
                                         {pA1?.isAdmin && <span className="mr-0.5" title="Admin / Host">👑</span>}
                                         <span>{pA1?.name}</span>
                                         {courtResult?.losingTeam === "teamA" && courtResult?.refereePlayerId === pA1?.id && (
                                           <span
-                                            className="ml-1 text-amber-300 not-italic no-underline font-bold text-xs select-none"
+                                            className="ml-1 text-amber-600 not-italic no-underline font-bold text-xs select-none"
                                             title={`Ditunjuk sebagai wasit Match ${proj.matchIndex + 1}`}
                                           >
                                             ⚖️
@@ -4610,12 +4425,12 @@ export default function BadmintonRotationApp() {
                                         )}
                                       </span>
                                       <span className="text-slate-400 font-normal text-xs">&amp;</span>
-                                      <span className={courtResult?.losingTeam === "teamA" ? "text-slate-300 line-through decoration-slate-600 inline-flex items-center gap-0.5" : "text-emerald-300 inline-flex items-center gap-0.5"}>
+                                      <span className={courtResult?.losingTeam === "teamA" ? "text-slate-400 line-through decoration-slate-400 inline-flex items-center gap-0.5" : "text-slate-800 inline-flex items-center gap-0.5 font-bold"}>
                                         {pA2?.isAdmin && <span className="mr-0.5" title="Admin / Host">👑</span>}
                                         <span>{pA2?.name}</span>
                                         {courtResult?.losingTeam === "teamA" && courtResult?.refereePlayerId === pA2?.id && (
                                           <span
-                                            className="ml-1 text-amber-300 not-italic no-underline font-bold text-xs select-none"
+                                            className="ml-1 text-amber-600 not-italic no-underline font-bold text-xs select-none"
                                             title={`Ditunjuk sebagai wasit Match ${proj.matchIndex + 1}`}
                                           >
                                             ⚖️
@@ -4623,16 +4438,16 @@ export default function BadmintonRotationApp() {
                                         )}
                                       </span>
                                       {courtResult?.losingTeam === "teamA" ? (
-                                        <span className="text-[9px] px-1 py-0.2 rounded bg-rose-500/15 text-rose-300 border border-rose-500/30 font-semibold flex items-center gap-1">
+                                        <span className="text-[9px] px-1 py-0.2 rounded bg-rose-100 text-rose-700 border border-rose-300 font-semibold flex items-center gap-1">
                                           <span>Kalah</span>
                                           {courtResult?.refereePlayerId === "admin" && !pA1?.isAdmin && !pA2?.isAdmin && (
-                                            <span className="text-purple-300 font-bold" title={`Wasit Match ${proj.matchIndex + 1}: Admin (Host)`}>
+                                            <span className="text-purple-700 font-bold" title={`Wasit Match ${proj.matchIndex + 1}: Admin (Host)`}>
                                               (⚖️ Admin)
                                             </span>
                                           )}
                                         </span>
                                       ) : courtResult?.losingTeam === "teamB" ? (
-                                        <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold flex items-center gap-0.5">
+                                        <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold flex items-center gap-0.5">
                                           <span>🏆</span>
                                           <span>Menang</span>
                                         </span>
@@ -4648,7 +4463,7 @@ export default function BadmintonRotationApp() {
                                           courtNum: cNum,
                                         })
                                       }
-                                      className="px-1.5 py-0.2 rounded text-[9px] font-bold tracking-wider uppercase bg-rose-400/15 text-rose-300 border border-rose-400/25 hover:bg-rose-400/30 hover:border-rose-400/50 hover:text-white transition cursor-pointer"
+                                      className="px-1.5 py-0.2 rounded text-[9px] font-bold tracking-wider uppercase bg-rose-100 text-rose-700 border border-rose-300 hover:bg-rose-200 transition cursor-pointer"
                                       title="Klik untuk tandai tim yang kalah & tentukan wasit"
                                     >
                                       VS
@@ -4664,12 +4479,12 @@ export default function BadmintonRotationApp() {
                                           : "font-bold"
                                       }`}
                                     >
-                                      <span className={courtResult?.losingTeam === "teamB" ? "text-slate-300 line-through decoration-slate-600 inline-flex items-center gap-0.5" : "text-sky-300 inline-flex items-center gap-0.5"}>
+                                      <span className={courtResult?.losingTeam === "teamB" ? "text-slate-400 line-through decoration-slate-400 inline-flex items-center gap-0.5" : "text-slate-800 inline-flex items-center gap-0.5 font-bold"}>
                                         {pB1?.isAdmin && <span className="mr-0.5" title="Admin / Host">👑</span>}
                                         <span>{pB1?.name}</span>
                                         {courtResult?.losingTeam === "teamB" && courtResult?.refereePlayerId === pB1?.id && (
                                           <span
-                                            className="ml-1 text-amber-300 not-italic no-underline font-bold text-xs select-none"
+                                            className="ml-1 text-amber-600 not-italic no-underline font-bold text-xs select-none"
                                             title={`Ditunjuk sebagai wasit Match ${proj.matchIndex + 1}`}
                                           >
                                             ⚖️
@@ -4677,12 +4492,12 @@ export default function BadmintonRotationApp() {
                                         )}
                                       </span>
                                       <span className="text-slate-400 font-normal text-xs">&amp;</span>
-                                      <span className={courtResult?.losingTeam === "teamB" ? "text-slate-300 line-through decoration-slate-600 inline-flex items-center gap-0.5" : "text-sky-300 inline-flex items-center gap-0.5"}>
+                                      <span className={courtResult?.losingTeam === "teamB" ? "text-slate-400 line-through decoration-slate-400 inline-flex items-center gap-0.5" : "text-slate-800 inline-flex items-center gap-0.5 font-bold"}>
                                         {pB2?.isAdmin && <span className="mr-0.5" title="Admin / Host">👑</span>}
                                         <span>{pB2?.name}</span>
                                         {courtResult?.losingTeam === "teamB" && courtResult?.refereePlayerId === pB2?.id && (
                                           <span
-                                            className="ml-1 text-amber-300 not-italic no-underline font-bold text-xs select-none"
+                                            className="ml-1 text-amber-600 not-italic no-underline font-bold text-xs select-none"
                                             title={`Ditunjuk sebagai wasit Match ${proj.matchIndex + 1}`}
                                           >
                                             ⚖️
@@ -4690,16 +4505,16 @@ export default function BadmintonRotationApp() {
                                         )}
                                       </span>
                                       {courtResult?.losingTeam === "teamB" ? (
-                                        <span className="text-[9px] px-1 py-0.2 rounded bg-rose-500/15 text-rose-300 border border-rose-500/30 font-semibold flex items-center gap-1">
+                                        <span className="text-[9px] px-1 py-0.2 rounded bg-rose-100 text-rose-700 border border-rose-300 font-semibold flex items-center gap-1">
                                           <span>Kalah</span>
                                           {courtResult?.refereePlayerId === "admin" && !pB1?.isAdmin && !pB2?.isAdmin && (
-                                            <span className="text-purple-300 font-bold" title={`Wasit Match ${proj.matchIndex + 1}: Admin (Host)`}>
+                                            <span className="text-purple-700 font-bold" title={`Wasit Match ${proj.matchIndex + 1}: Admin (Host)`}>
                                               (⚖️ Admin)
                                             </span>
                                           )}
                                         </span>
                                       ) : courtResult?.losingTeam === "teamA" ? (
-                                        <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold flex items-center gap-0.5">
+                                        <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold flex items-center gap-0.5">
                                           <span>🏆</span>
                                           <span>Menang</span>
                                         </span>
@@ -4710,9 +4525,9 @@ export default function BadmintonRotationApp() {
                                   {/* Info Wasit yang Sedang Memimpin Match Ini */}
                                   {currentRefereePlayer && (
                                     <div className="flex flex-wrap items-center gap-2 pt-0.5">
-                                      <span className="inline-flex items-center gap-1 text-[11px] text-sky-300/90 font-medium bg-sky-950/30 border border-sky-500/20 px-2 py-0.5 rounded-md">
+                                      <span className="inline-flex items-center gap-1 text-[11px] text-sky-800 font-medium bg-sky-100 border border-sky-300 px-2 py-0.5 rounded-md">
                                         <span>⚖️ Dipimpin Wasit:</span>
-                                        <strong className="text-sky-200">{currentRefereePlayer.name}</strong>
+                                        <strong className="text-sky-900">{currentRefereePlayer.name}</strong>
                                       </span>
                                     </div>
                                   )}
@@ -4736,13 +4551,13 @@ export default function BadmintonRotationApp() {
                                       Math.max(0, cockCount - 1)
                                     )
                                   }
-                                  className="w-6 h-6 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 flex items-center justify-center text-xs font-bold transition active:scale-95 disabled:opacity-30"
+                                  className="w-6 h-6 rounded bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 flex items-center justify-center text-xs font-bold transition active:scale-95 disabled:opacity-30 cursor-pointer"
                                   title="Kurangi kok"
                                   disabled={cockCount <= 0}
                                 >
                                   -
                                 </button>
-                                <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-900/70 border border-slate-700/70 min-w-[50px] justify-center">
+                                <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-slate-300 min-w-[50px] justify-center">
                                   <input
                                     type="number"
                                     min={0}
@@ -4754,7 +4569,7 @@ export default function BadmintonRotationApp() {
                                         Math.max(0, parseInt(e.target.value) || 0)
                                       )
                                     }
-                                    className="w-6 bg-transparent text-center font-mono font-bold text-slate-100 text-xs focus:outline-none"
+                                    className="w-6 bg-transparent text-center font-mono font-bold text-slate-800 text-xs focus:outline-none"
                                   />
                                   <span className="text-[11px]" title="Shuttlecock">🏸</span>
                                 </div>
@@ -4767,7 +4582,7 @@ export default function BadmintonRotationApp() {
                                       cockCount + 1
                                     )
                                   }
-                                  className="w-6 h-6 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 flex items-center justify-center text-xs font-bold transition active:scale-95"
+                                  className="w-6 h-6 rounded bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 flex items-center justify-center text-xs font-bold transition active:scale-95 cursor-pointer"
                                   title="Tambah kok"
                                 >
                                   +
@@ -4788,8 +4603,8 @@ export default function BadmintonRotationApp() {
                                 }
                                 className={`inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold border transition shadow-sm select-none cursor-pointer ${
                                   isCourtCompleted
-                                    ? "bg-emerald-500/25 text-emerald-200 border-emerald-400/50 hover:bg-emerald-500/35 shadow-sm shadow-emerald-950/40"
-                                    : "bg-slate-800 text-slate-400 border-slate-700 hover:border-slate-600 hover:text-white"
+                                    ? "bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200"
+                                    : "bg-white text-slate-600 border-slate-300 hover:border-slate-400 hover:bg-slate-50"
                                 }`}
                                 title={
                                   isCourtCompleted
@@ -4799,7 +4614,7 @@ export default function BadmintonRotationApp() {
                               >
                                 <span
                                   className={`w-1.5 h-1.5 rounded-full ${
-                                    isCourtCompleted ? "bg-emerald-300 shadow-sm shadow-emerald-400" : "bg-slate-500"
+                                    isCourtCompleted ? "bg-emerald-600" : "bg-slate-400"
                                   }`}
                                 ></span>
                                 <span>{isCourtCompleted ? "✓ Selesai" : "⏳ Belum"}</span>
@@ -4819,8 +4634,8 @@ export default function BadmintonRotationApp() {
                                   }
                                   className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold border transition shadow-sm active:scale-95 cursor-pointer ${
                                     courtResult
-                                      ? "bg-amber-400/15 text-amber-200 border-amber-400/40 hover:bg-amber-400/25 shadow-sm shadow-amber-950/30"
-                                      : "bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-amber-300 border-slate-700 hover:border-slate-600"
+                                      ? "bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200"
+                                      : "bg-white hover:bg-slate-100 text-slate-600 hover:text-amber-800 border-slate-300"
                                   }`}
                                   title={
                                     courtResult
@@ -4840,7 +4655,7 @@ export default function BadmintonRotationApp() {
                                       courtNum: cNum,
                                     })
                                   }
-                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 hover:border-slate-600 transition shadow-sm active:scale-95 cursor-pointer"
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 transition shadow-sm active:scale-95 cursor-pointer"
                                   title={`Edit formasi Lapangan ${cNum} saja pada Match ${proj.matchIndex}`}
                                 >
                                   <span>✏️</span>
@@ -4857,17 +4672,17 @@ export default function BadmintonRotationApp() {
               </table>
             </div>
           </section>
-        ) : (
-          <section className="bg-slate-800/70 border border-slate-700/60 rounded-2xl shadow-sm overflow-hidden">
+        ) : activeTab === "spreadsheet" ? (
+          <section className="bg-[#E7EEF4] border border-white/80 rounded-2xl shadow-sm overflow-hidden animate-in fade-in duration-200">
           {/* Header Tabel Spreadsheet */}
-          <div className="p-4 sm:px-5 border-b border-slate-700/60 flex items-center justify-between gap-3 bg-slate-850/60">
-            <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2">
+          <div className="p-4 sm:px-5 border-b border-slate-300/70 flex items-center justify-between gap-3 bg-[#DFE7EF]/80">
+            <h2 className="text-sm font-bold text-slate-800 flex items-center gap-2">
               <span>📊 Rotasi Pemain</span>
             </h2>
 
-            <div className="flex items-center gap-2 bg-slate-800/80 px-2.5 py-1 rounded-lg border border-slate-700/60 text-xs">
-              <span className="text-slate-400">Total Cock:</span>
-              <span className="font-mono font-bold text-emerald-300">
+            <div className="flex items-center gap-2 bg-white/90 px-2.5 py-1 rounded-lg border border-emerald-300 text-xs">
+              <span className="text-slate-600 font-medium">Total Cock:</span>
+              <span className="font-mono font-bold text-emerald-700">
                 {totalSessionShuttlecocks}
               </span>
             </div>
@@ -4877,10 +4692,10 @@ export default function BadmintonRotationApp() {
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-left">
               <thead>
-                <tr className="bg-slate-850/80 border-b border-slate-700/60 text-slate-300">
+                <tr className="bg-[#DFE7EF] border-b border-slate-300/70 text-slate-600">
                   {/* Sumbu Y Header: Sticky Left Column */}
-                  <th className="sticky left-0 z-20 bg-slate-850 py-3 px-3 min-w-[280px] sm:min-w-[320px] border-r border-slate-700/60 shadow-sm">
-                    <div className="text-xs font-bold tracking-wider text-slate-300 uppercase">
+                  <th className="sticky left-0 z-20 bg-[#DFE7EF] py-3 px-3 min-w-[280px] sm:min-w-[320px] border-r border-slate-300/70 shadow-sm">
+                    <div className="text-xs font-bold tracking-wider text-slate-600 uppercase">
                       Pemain &amp; Biaya
                     </div>
                   </th>
@@ -4892,9 +4707,9 @@ export default function BadmintonRotationApp() {
                       <th
                         key={proj.matchIndex}
                         onClick={() => setSelectedMatchIdx(proj.matchIndex)}
-                        className={`py-2 px-2 text-center border-r border-slate-800/80 min-w-[105px] cursor-pointer hover:bg-slate-800/80 transition-colors group select-none ${
+                        className={`py-2 px-2 text-center border-r border-slate-300/70 min-w-[105px] cursor-pointer hover:bg-slate-200/60 transition-colors group select-none ${
                           isCompleted
-                            ? "bg-emerald-950/25 border-emerald-500/40"
+                            ? "bg-emerald-500/10 border-emerald-500/30"
                             : ""
                         }`}
                         title="Klik untuk melihat detail atau edit formasi match ini"
@@ -4904,27 +4719,27 @@ export default function BadmintonRotationApp() {
                             <span
                               className={`text-xs font-black font-mono flex items-center gap-1 ${
                                 isCompleted
-                                  ? "text-emerald-300"
-                                  : "text-emerald-400 group-hover:text-emerald-300"
+                                  ? "text-emerald-700"
+                                  : "text-emerald-700 group-hover:text-emerald-800"
                               }`}
                             >
                               M{proj.matchIndex}
                               {proj.isOverridden && (
-                                <span className="text-[10px] text-amber-400" title="Override aktif">
+                                <span className="text-[10px] text-amber-500" title="Override aktif">
                                   ✏️
                                 </span>
                               )}
                             </span>
                             {isCompleted && (
                               <span
-                                className="text-[9px] px-1 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold"
+                                className="text-[9px] px-1 py-0.2 rounded bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold"
                                 title="Match selesai (formasi terkunci)"
                               >
                                 ✓
                               </span>
                             )}
                           </div>
-                          <span className="text-[10px] text-slate-400 group-hover:text-slate-300">
+                          <span className="text-[10px] text-slate-500 group-hover:text-slate-600">
                             {isCompleted
                               ? "Selesai"
                               : proj.isOverridden
@@ -4949,10 +4764,10 @@ export default function BadmintonRotationApp() {
                               return (
                                 <div
                                   key={cNum}
-                                  className={`flex items-center justify-between gap-1 rounded px-1.5 py-0.5 w-full transition border ${theme.bgSubtleClass}`}
+                                  className={`flex items-center justify-between gap-1 rounded px-1.5 py-0.5 w-full transition border shadow-xs ${theme.bgSubtleClass}`}
                                   title={`Shuttlecock ${theme.name} di Match ${proj.matchIndex}`}
                                 >
-                                  <span className={`text-[9px] font-black font-mono ${theme.textClass}`}>
+                                  <span className="text-[9px] font-black font-mono text-white">
                                     {theme.code}
                                   </span>
                                   <input
@@ -4966,7 +4781,7 @@ export default function BadmintonRotationApp() {
                                         Math.max(0, parseInt(e.target.value) || 0)
                                       )
                                     }
-                                    className={`w-6 bg-transparent text-right text-[10px] font-black focus:outline-none cursor-text ${theme.textClass}`}
+                                    className="w-6 bg-transparent text-right text-[10px] font-black focus:outline-none cursor-text text-white"
                                   />
                                 </div>
                               );
@@ -4976,13 +4791,13 @@ export default function BadmintonRotationApp() {
                           {/* Checkbox Tandai Match Selesai */}
                           <div
                             onClick={(e) => e.stopPropagation()}
-                            className="mt-1.5 w-full pt-1.5 border-t border-slate-800/80 flex flex-col items-center"
+                            className="mt-1.5 w-full pt-1.5 border-t border-slate-300/70 flex flex-col items-center"
                           >
                             <label
                               className={`flex items-center justify-center gap-1.5 px-1.5 py-1 rounded-lg w-full cursor-pointer transition text-[10px] font-bold border select-none ${
                                 isCompleted
-                                  ? "bg-emerald-500/25 text-emerald-300 border-emerald-500/50 shadow-sm shadow-emerald-950/50 hover:bg-emerald-500/35"
-                                  : "bg-slate-950/80 text-slate-400 border-slate-700/70 hover:border-slate-500 hover:text-slate-200"
+                                  ? "bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200"
+                                  : "bg-white/90 text-slate-600 border-slate-300 hover:border-slate-400"
                               }`}
                               title={
                                 isCompleted
@@ -4999,7 +4814,7 @@ export default function BadmintonRotationApp() {
                                     e.target.checked
                                   )
                                 }
-                                className="w-3.5 h-3.5 rounded border-slate-600 text-emerald-500 focus:ring-emerald-500 accent-emerald-500 cursor-pointer"
+                                className="w-3.5 h-3.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 accent-emerald-600 cursor-pointer"
                               />
                               <span className="truncate">
                                 {isCompleted ? "Selesai ✓" : "Selesai"}
@@ -5013,14 +4828,22 @@ export default function BadmintonRotationApp() {
                 </tr>
               </thead>
 
-              <tbody className="divide-y divide-slate-800/60">
+              <tbody className="divide-y divide-slate-200/80 bg-white/80">
                 {presentPlayers.length === 0 ? (
                   <tr>
                     <td
                       colSpan={projectedMatchCount + 1}
                       className="py-12 text-center text-slate-400 italic text-sm"
                     >
-                      Belum ada pemain yang berstatus hadir. Buka panel &quot;Kelola Pemain&quot; di atas untuk mencentang kehadiran.
+                      Belum ada pemain yang berstatus hadir.{" "}
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab("pemain")}
+                        className="text-emerald-600 underline font-semibold hover:text-emerald-500 cursor-pointer not-italic"
+                      >
+                        Buka tab Kelola Pemain
+                      </button>{" "}
+                      untuk mencentang kehadiran.
                     </td>
                   </tr>
                 ) : (
@@ -5034,18 +4857,20 @@ export default function BadmintonRotationApp() {
                     return (
                       <tr
                         key={player.id}
-                        className={`hover:bg-slate-800/30 transition-colors ${
-                          player.isAdmin ? "bg-purple-950/10" : ""
+                        className={`transition-colors ${
+                          player.isAdmin ? "bg-[#E6E4F2]/50 hover:bg-[#E6E4F2]/80" : "hover:bg-slate-100/60"
                         }`}
                       >
                         {/* Kolom Sticky Pemain (Sumbu Y) */}
-                        <td className="sticky left-0 z-10 bg-slate-850 py-2 px-3 border-r border-slate-700/60 flex items-center justify-between gap-2 shadow-sm">
+                        <td className={`sticky left-0 z-10 py-2 px-3 border-r border-slate-300/70 flex items-center justify-between gap-2 shadow-sm ${
+                          player.isAdmin ? "bg-[#EAE8F5]" : "bg-[#F3F6F9]"
+                        }`}>
                           <div className="flex items-center gap-2 overflow-hidden">
                             <span
                               className={`w-5 h-5 rounded-full text-[10px] font-mono flex items-center justify-center font-bold shrink-0 ${
                                 player.isAdmin
-                                  ? "bg-purple-400/20 text-purple-300 border border-purple-400/30"
-                                  : "bg-slate-800 text-slate-300"
+                                  ? "bg-[#DCD5EC] text-[#6B46C1] border border-[#C6B8E3]"
+                                  : "bg-slate-200 text-slate-700"
                               }`}
                             >
                               #{player.arrivalOrder}
@@ -5053,7 +4878,7 @@ export default function BadmintonRotationApp() {
                             <div className="truncate">
                               <div className="flex items-center gap-1">
                                 {player.isAdmin && (
-                                  <span className="text-purple-300 shrink-0 text-xs" title="Admin / Host">
+                                  <span className="text-purple-700 shrink-0 text-xs" title="Admin / Host">
                                     👑
                                   </span>
                                 )}
@@ -5063,7 +4888,7 @@ export default function BadmintonRotationApp() {
                                   onChange={(e) =>
                                     handleUpdatePlayerName(player.id, e.target.value)
                                   }
-                                  className="bg-slate-900/50 hover:bg-slate-900 focus:bg-slate-900 border border-transparent hover:border-slate-700 focus:border-emerald-400 rounded px-1.5 py-0.5 text-xs font-bold text-slate-100 focus:outline-none transition w-[110px] sm:w-[135px] truncate"
+                                  className="bg-transparent hover:bg-white focus:bg-white border border-transparent hover:border-slate-300 focus:border-emerald-500 rounded px-1.5 py-0.5 text-xs font-bold text-slate-800 focus:outline-none transition w-[110px] sm:w-[135px] truncate"
                                   title="Ubah nama pemain"
                                   placeholder="Nama pemain..."
                                 />
@@ -5071,7 +4896,7 @@ export default function BadmintonRotationApp() {
                               {/* Rincian Biaya per Profile */}
                               <div className="flex items-center gap-1.5 mt-0.5">
                                 {player.isAdmin ? (
-                                  <span className="text-[10px] text-purple-300 font-mono font-medium">
+                                  <span className="text-[10px] text-[#6B46C1] font-mono font-medium">
                                     Bebas Iuran
                                   </span>
                                 ) : (
@@ -5079,22 +4904,22 @@ export default function BadmintonRotationApp() {
                                     <button
                                       type="button"
                                       onClick={() => setEditingFeePlayer(player)}
-                                      className="text-[11px] text-emerald-300 hover:text-emerald-200 font-mono font-bold flex items-center gap-1 transition"
+                                      className="text-[11px] text-emerald-700 hover:text-emerald-800 font-mono font-bold flex items-center gap-1 transition"
                                       title="Klik untuk ubah biaya / beri diskon"
                                     >
                                       <span>Rp {fee.toLocaleString("id-ID")}</span>
-                                      <span className="text-[10px] text-slate-500 hover:text-slate-300">✏️</span>
+                                      <span className="text-[10px] text-slate-400 hover:text-slate-600">✏️</span>
                                     </button>
                                     {isCustom && (
                                       <span
-                                        className="text-[9px] px-1 py-0.2 rounded bg-amber-400/15 text-amber-200 border border-amber-400/30 font-semibold cursor-pointer"
+                                        className="text-[9px] px-1 py-0.2 rounded bg-amber-100 text-amber-800 border border-amber-300 font-semibold cursor-pointer"
                                         onClick={() => setEditingFeePlayer(player)}
                                         title="Biaya disesuaikan manual"
                                       >
                                         Diskon
                                       </span>
                                     )}
-                                    <span className="text-slate-400 font-normal text-[10px]">
+                                    <span className="text-slate-500 font-normal text-[10px]">
                                       ({cocksUsed} 🏸)
                                     </span>
                                   </>
@@ -5106,7 +4931,7 @@ export default function BadmintonRotationApp() {
                           <div className="flex items-center gap-1.5 shrink-0">
                             {/* Status Pembayaran Dropdown (QRIS / Cash / Belum) */}
                             {player.isAdmin ? (
-                              <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-400/15 text-purple-200 border border-purple-400/30 font-mono">
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[#DCD5EC] text-[#6B46C1] border border-[#C6B8E3] font-mono">
                                 Host
                               </span>
                             ) : (
@@ -5120,20 +4945,20 @@ export default function BadmintonRotationApp() {
                                 }
                                 className={`px-1.5 py-0.5 rounded text-[10px] font-bold font-mono border focus:outline-none cursor-pointer transition ${
                                   paymentStatuses[player.id] === "QRIS"
-                                    ? "bg-sky-400/15 text-sky-200 border-sky-400/35 hover:bg-sky-400/25"
+                                    ? "bg-sky-100 text-sky-800 border-sky-300"
                                     : paymentStatuses[player.id] === "Cash"
-                                    ? "bg-emerald-400/15 text-emerald-200 border-emerald-400/35 hover:bg-emerald-400/25"
-                                    : "bg-slate-900/60 text-slate-400 border-slate-700 hover:border-slate-600"
+                                    ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                                    : "bg-white text-slate-600 border-slate-300 hover:border-slate-400"
                                 }`}
                                 title="Status Pembayaran"
                               >
-                                <option value="" className="bg-slate-900 text-slate-400 font-normal">
+                                <option value="" className="bg-white text-slate-500 font-normal">
                                   - Belum -
                                 </option>
-                                <option value="QRIS" className="bg-slate-900 text-sky-300 font-bold">
+                                <option value="QRIS" className="bg-white text-sky-800 font-bold">
                                   QRIS
                                 </option>
-                                <option value="Cash" className="bg-slate-900 text-emerald-300 font-bold">
+                                <option value="Cash" className="bg-white text-emerald-800 font-bold">
                                   Cash
                                 </option>
                               </select>
@@ -5151,24 +4976,24 @@ export default function BadmintonRotationApp() {
                                 }
                                 className={`px-1 py-0.5 rounded text-[10px] font-bold font-mono border focus:outline-none cursor-pointer transition ${
                                   (player.level ?? 0) >= 4
-                                    ? "bg-amber-400/15 text-amber-200 border-amber-400/30 hover:bg-amber-400/25"
+                                    ? "bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200"
                                     : player.level === 3
-                                    ? "bg-sky-400/15 text-sky-200 border-sky-400/30 hover:bg-sky-400/25"
-                                    : "bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700"
+                                    ? "bg-sky-100 text-sky-800 border-sky-300 hover:bg-sky-200"
+                                    : "bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200"
                                 }`}
                                 title="Ubah level pemain"
                               >
-                                <option value={5} className="bg-slate-900 text-white font-bold">L5</option>
-                                <option value={4} className="bg-slate-900 text-white font-bold">L4</option>
-                                <option value={3} className="bg-slate-900 text-white font-bold">L3</option>
-                                <option value={2} className="bg-slate-900 text-white font-bold">L2</option>
-                                <option value={1} className="bg-slate-900 text-white font-bold">L1</option>
+                                <option value={5} className="bg-white text-slate-800 font-bold">L5</option>
+                                <option value={4} className="bg-white text-slate-800 font-bold">L4</option>
+                                <option value={3} className="bg-white text-slate-800 font-bold">L3</option>
+                                <option value={2} className="bg-white text-slate-800 font-bold">L2</option>
+                                <option value={1} className="bg-white text-slate-800 font-bold">L1</option>
                               </select>
                             )}
 
                             {/* Total Main Badge */}
                             <span
-                              className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-300"
+                              className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-200 text-slate-700"
                               title={`Bermain ${totalPlayed} kali dari ${projectedMatchCount} match`}
                             >
                               {totalPlayed}m
@@ -5188,8 +5013,8 @@ export default function BadmintonRotationApp() {
                               <td
                                 key={proj.matchIndex}
                                 onClick={() => setSelectedMatchIdx(proj.matchIndex)}
-                                className={`py-2 px-2 text-center border-r border-slate-800/50 cursor-pointer hover:bg-slate-800/50 transition-colors ${
-                                  isCompleted ? "bg-emerald-950/15" : ""
+                                className={`py-2 px-2 text-center border-r border-slate-300/70 cursor-pointer hover:bg-slate-200/50 transition-colors ${
+                                  isCompleted ? "bg-emerald-500/10" : ""
                                 }`}
                               >
                                 <span
@@ -5205,11 +5030,11 @@ export default function BadmintonRotationApp() {
                             <td
                               key={proj.matchIndex}
                               onClick={() => setSelectedMatchIdx(proj.matchIndex)}
-                              className={`py-2 px-2 text-center border-r border-slate-800/50 cursor-pointer hover:bg-slate-800/50 transition-colors ${
-                                isCompleted ? "bg-emerald-950/15" : ""
+                              className={`py-2 px-2 text-center border-r border-slate-300/70 cursor-pointer hover:bg-slate-200/50 transition-colors ${
+                                isCompleted ? "bg-emerald-500/10" : ""
                               }`}
                             >
-                              <span className="text-slate-700 select-none font-black text-xs">
+                              <span className="text-slate-400 select-none font-bold text-xs">
                                 -
                               </span>
                             </td>
@@ -5223,6 +5048,257 @@ export default function BadmintonRotationApp() {
             </table>
           </div>
         </section>
+        ) : (
+          <section className="bg-[#E7EEF4] border border-white/80 rounded-2xl p-5 space-y-4 shadow-sm animate-in fade-in duration-200 text-slate-800">
+            <div className="flex items-center justify-between border-b border-slate-300/70 pb-3">
+              <h2 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                <span>👥 Kelola Pemain ({players.length} Terdaftar)</span>
+              </h2>
+            </div>
+
+            {/* Form Tambah Pemain Baru */}
+            <form
+              onSubmit={handleAddPlayer}
+              className="bg-[#DFE7EF]/80 border border-slate-300/70 rounded-xl p-4 flex flex-wrap items-end gap-3"
+            >
+              <div className="flex-1 min-w-[200px]">
+                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  Nama Pemain
+                </label>
+                <input
+                  type="text"
+                  placeholder="Contoh: Taufik Hidayat"
+                  value={newPlayerName}
+                  onChange={(e) => setNewPlayerName(e.target.value)}
+                  className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-500 shadow-inner"
+                />
+              </div>
+
+              <div className="w-28">
+                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  Level (1 - 5)
+                </label>
+                <select
+                  value={newPlayerLevel}
+                  onChange={(e) => setNewPlayerLevel(Number(e.target.value))}
+                  className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-emerald-500 cursor-pointer"
+                >
+                  <option value={5}>Lvl 5 (Mahir)</option>
+                  <option value={4}>Lvl 4 (Atas)</option>
+                  <option value={3}>Lvl 3 (Menengah)</option>
+                  <option value={2}>Lvl 2 (Dasar)</option>
+                  <option value={1}>Lvl 1 (Pemula)</option>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-2 pb-2">
+                <input
+                  type="checkbox"
+                  id="new-present"
+                  checked={newPlayerIsPresent}
+                  onChange={(e) => setNewPlayerIsPresent(e.target.checked)}
+                  className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 accent-emerald-600 cursor-pointer"
+                />
+                <label
+                  htmlFor="new-present"
+                  className="text-xs font-medium text-slate-700 cursor-pointer"
+                >
+                  Langsung Hadir
+                </label>
+              </div>
+
+              <button
+                type="submit"
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition shadow-sm cursor-pointer"
+              >
+                + Tambah Pemain
+              </button>
+            </form>
+
+            {/* Tabel Daftar Pemain Terdaftar */}
+            <div className="overflow-x-auto rounded-xl border border-slate-300/70">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-[#DFE7EF] text-slate-600 uppercase tracking-wider font-semibold border-b border-slate-300/70">
+                  <tr>
+                    <th className="py-2.5 px-4 w-16 text-center">Hadir</th>
+                    <th className="py-2.5 px-4 w-20 text-center">Urutan</th>
+                    <th className="py-2.5 px-4 min-w-[200px]">Nama Pemain (Live Edit)</th>
+                    <th className="py-2.5 px-4 w-32 text-center">Level</th>
+                    <th className="py-2.5 px-4 w-24 text-center">Main</th>
+                    <th className="py-2.5 px-4 w-36 text-right">Bayar</th>
+                    <th className="py-2.5 px-4 w-24 text-right">
+                      <button
+                        type="button"
+                        onClick={handleDeleteAllPlayers}
+                        disabled={players.filter((p) => !p.isAdmin).length === 0}
+                        className="px-2.5 py-1 bg-rose-600 hover:bg-rose-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold transition shadow-sm cursor-pointer normal-case inline-flex items-center gap-1"
+                        title="Hapus semua pemain kecuali Host/Admin"
+                      >
+                        <span>🗑️</span>
+                        <span>Hapus</span>
+                      </button>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200/80 bg-white/80">
+                  {sortedPlayers.map((player) => {
+                    const pStats = playerStatsMap.get(player.id);
+                    return (
+                      <tr
+                        key={player.id}
+                        className={`hover:bg-slate-100/60 transition ${
+                          player.isAdmin
+                            ? "bg-[#E6E4F2]/50 border-l-2 border-purple-500"
+                            : player.isPresent
+                            ? "bg-emerald-50/40"
+                            : "opacity-60"
+                        }`}
+                      >
+                        <td className="py-2 px-4 text-center">
+                          <input
+                            type="checkbox"
+                            checked={player.isPresent}
+                            onChange={() => handleTogglePresent(player.id)}
+                            className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 accent-emerald-600 cursor-pointer"
+                          />
+                        </td>
+                        <td className="py-2 px-4 text-center font-mono">
+                          {player.isPresent ? (
+                            <span
+                              className={`px-2 py-0.5 rounded-full font-bold ${
+                                player.isAdmin
+                                  ? "bg-[#DCD5EC] text-[#6B46C1] border border-[#C6B8E3]"
+                                  : "bg-slate-200 text-slate-700"
+                              }`}
+                            >
+                              #{player.arrivalOrder}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400">-</span>
+                          )}
+                        </td>
+                        <td className="py-2 px-4 font-semibold text-slate-800">
+                          <div className="flex items-center gap-1.5">
+                            {player.isAdmin && (
+                              <span className="px-1.5 py-0.2 rounded bg-[#DCD5EC] text-[#6B46C1] border border-[#C6B8E3] text-[10px] font-black shrink-0">
+                                👑 ADMIN
+                              </span>
+                            )}
+                            <div className="relative flex-1 min-w-[150px]">
+                              <input
+                                type="text"
+                                value={player.name}
+                                onChange={(e) =>
+                                  handleUpdatePlayerName(player.id, e.target.value)
+                                }
+                                className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-slate-300 hover:border-slate-400 focus:border-emerald-500 rounded-lg px-2.5 py-1 text-xs font-semibold text-slate-800 focus:outline-none transition shadow-inner"
+                                placeholder="Nama pemain..."
+                                title="Klik untuk mengedit nama pemain langsung"
+                              />
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-2 px-4 text-center">
+                          {player.isAdmin ? (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold bg-[#DCD5EC] text-[#6B46C1] border border-[#C6B8E3] font-mono">
+                              👑 Host
+                            </span>
+                          ) : (
+                            <select
+                              value={player.level ?? 1}
+                              onChange={(e) =>
+                                handleUpdatePlayerLevel(
+                                  player.id,
+                                  Number(e.target.value)
+                                )
+                              }
+                              className="bg-white border border-slate-300 hover:border-emerald-500 rounded-lg px-2 py-1 text-xs font-bold text-slate-800 focus:outline-none cursor-pointer transition"
+                              title="Ubah level pemain (otomatis menghitung ulang match berikutnya secara real-time)"
+                            >
+                              <option value={5}>Level 5 (Mahir)</option>
+                              <option value={4}>Level 4 (Atas)</option>
+                              <option value={3}>Level 3 (Menengah)</option>
+                              <option value={2}>Level 2 (Dasar)</option>
+                              <option value={1}>Level 1 (Pemula)</option>
+                            </select>
+                          )}
+                        </td>
+                        <td className="py-2 px-4 text-center font-mono text-slate-600">
+                          {player.isPresent ? (
+                            <span
+                              className="font-bold text-slate-700"
+                              title={`Bermain ${pStats?.matchesPlayed || 0} match (${pStats?.shuttlecockCount || 0} kok)`}
+                            >
+                              {pStats?.matchesPlayed || 0}m
+                            </span>
+                          ) : (
+                            <span className="text-slate-400">-</span>
+                          )}
+                        </td>
+                        <td className="py-2 px-4 text-right font-mono font-bold">
+                          {player.isAdmin ? (
+                            <div className="flex flex-col items-end">
+                              <span className="text-purple-700 text-xs font-black">
+                                {pStats?.isCustom
+                                  ? `Rp ${pStats?.fee.toLocaleString("id-ID")}`
+                                  : "GRATIS (Host)"}
+                              </span>
+                              <span className="text-[10px] text-slate-500 font-normal">
+                                Bebas Iuran
+                              </span>
+                            </div>
+                          ) : player.isPresent ? (
+                            <div className="flex flex-col items-end">
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingFeePlayer(player)}
+                                  className="text-emerald-700 hover:text-emerald-800 text-xs flex items-center gap-1 transition"
+                                  title="Klik untuk ubah biaya manual / beri diskon"
+                                >
+                                  <span>Rp {pStats?.fee.toLocaleString("id-ID")}</span>
+                                  <span className="text-[10px] text-slate-400 hover:text-slate-600">✏️</span>
+                                </button>
+                                {pStats?.isCustom && (
+                                  <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 border border-amber-300 font-semibold">
+                                    Diskon
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-[10px] text-slate-500 font-normal">
+                                {pStats?.isCustom
+                                  ? `Auto: Rp ${pStats?.autoFee.toLocaleString("id-ID")}`
+                                  : `11k + 3k×${pStats?.shuttlecockCount}`}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 text-xs font-normal">
+                              - (Tidak Hadir)
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-2 px-4 text-right">
+                          {player.isAdmin ? (
+                            <span className="text-slate-400 text-xs select-none" title="Admin tidak dapat dihapus">
+                              🔒
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => handleDeletePlayer(player.id)}
+                              className="text-slate-400 hover:text-rose-600 transition text-xs p-1"
+                              title="Hapus Pemain"
+                            >
+                              🗑️
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </section>
         )}
       </main>
 
