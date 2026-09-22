@@ -96,6 +96,17 @@ export interface MatchOverride {
 export type CourtShuttlecockData = Record<string, number>;
 
 /**
+ * Data Hasil Pertandingan & Penunjukan Wasit per Lapangan
+ * Key format: `${matchIndex}_c${courtNumber}` (misal: "1_c1", "1_c2")
+ */
+export interface CourtResult {
+  losingTeam: "teamA" | "teamB";
+  refereePlayerId: string; // ID pemain dari tim yang kalah yang ditunjuk jadi wasit
+  refereeForMatch: number; // Match index di mana orang ini bertugas jadi wasit (misal matchIndex + 1)
+  assignedAt?: string;
+}
+
+/**
  * Konfigurasi Tema Warna & Identitas Lapangan (C1 - C5)
  */
 export const COURT_THEMES: Record<
@@ -232,6 +243,7 @@ interface SessionData {
   paymentStatuses: Record<string, "QRIS" | "Cash" | "">;
   courtPrice: number;
   shuttlecockPrice: number;
+  courtResults?: Record<string, CourtResult>;
 }
 
 function loadSession(): Partial<SessionData> | null {
@@ -497,8 +509,8 @@ function optimizeMultiCourtPairings(
     courtGroups.push(sorted.slice(c * 4, c * 4 + 4));
   }
 
-  let bestCourts = courtGroups;
-  let bestCourtOpt = bestCourts.map((group) =>
+  const bestCourts = courtGroups;
+  const bestCourtOpt = bestCourts.map((group) =>
     optimizeCourtPairing(
       group as [Player, Player, Player, Player],
       currentMatchIndex,
@@ -2037,6 +2049,500 @@ const EditSingleCourtModal: React.FC<EditSingleCourtModalProps> = ({
 };
 
 // ============================================================================
+// MODAL PENUNJUKAN WASIT & CATAT TIM KALAH
+// ============================================================================
+
+interface MatchRefereeModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  matchIndex: number;
+  courtNum: number;
+  courtMatch: CourtMatch | null;
+  playerMap: Map<string, Player>;
+  allPlayers?: Player[];
+  currentResult?: CourtResult | null;
+  isCourtCompleted: boolean;
+  refereeStats: Record<string, number>;
+  onSaveResult: (
+    matchIdx: number,
+    courtNum: number,
+    result: { losingTeam: "teamA" | "teamB"; refereePlayerId: string },
+    markCompleted: boolean
+  ) => void;
+  onResetResult: (matchIdx: number, courtNum: number) => void;
+}
+
+const MatchRefereeModalContent: React.FC<MatchRefereeModalProps> = ({
+  onClose,
+  matchIndex,
+  courtNum,
+  courtMatch,
+  playerMap,
+  allPlayers,
+  currentResult,
+  isCourtCompleted,
+  refereeStats,
+  onSaveResult,
+  onResetResult,
+}) => {
+  const [selectedLosingTeam, setSelectedLosingTeam] = useState<"teamA" | "teamB" | null>(
+    currentResult?.losingTeam || null
+  );
+  const [selectedRefereeId, setSelectedRefereeId] = useState<string>(
+    currentResult?.refereePlayerId || ""
+  );
+  const [markCompleted, setMarkCompleted] = useState<boolean>(
+    isCourtCompleted ? true : true
+  );
+
+  const theme = COURT_THEMES[courtNum] || COURT_THEMES[1];
+
+  const pA1 = courtMatch?.teamA?.player1Id ? playerMap.get(courtMatch.teamA.player1Id) : null;
+  const pA2 = courtMatch?.teamA?.player2Id ? playerMap.get(courtMatch.teamA.player2Id) : null;
+  const pB1 = courtMatch?.teamB?.player1Id ? playerMap.get(courtMatch.teamB.player1Id) : null;
+  const pB2 = courtMatch?.teamB?.player2Id ? playerMap.get(courtMatch.teamB.player2Id) : null;
+
+  const losingPlayers = useMemo(() => {
+    if (selectedLosingTeam === "teamA") {
+      return [pA1, pA2].filter(Boolean) as Player[];
+    }
+    if (selectedLosingTeam === "teamB") {
+      return [pB1, pB2].filter(Boolean) as Player[];
+    }
+    return [];
+  }, [selectedLosingTeam, pA1, pA2, pB1, pB2]);
+
+  const adminPlayer = useMemo(() => {
+    return playerMap.get("admin") || Array.from(playerMap.values()).find((p) => p.isAdmin) || null;
+  }, [playerMap]);
+
+  const refereeCandidateOptions = useMemo(() => {
+    const list = [...losingPlayers];
+    if (adminPlayer && !list.some((p) => p.id === adminPlayer.id)) {
+      list.push(adminPlayer);
+    }
+    return list;
+  }, [losingPlayers, adminPlayer]);
+
+  const participantsList = useMemo(() => {
+    const base = allPlayers && allPlayers.length > 0 ? allPlayers : Array.from(playerMap.values());
+    // Hanya tampilkan peserta yang diceklis hadir (atau Admin / Host)
+    return base.filter((p) => p.isPresent || p.isAdmin);
+  }, [allPlayers, playerMap]);
+
+  const handleSelectLosingTeam = (team: "teamA" | "teamB") => {
+    setSelectedLosingTeam(team);
+    const newTeamPlayers = team === "teamA" ? [pA1?.id, pA2?.id] : [pB1?.id, pB2?.id];
+    // Reset wasit terpilih jika bukan salah satu dari tim kalah yang baru DAN bukan admin
+    if (!newTeamPlayers.includes(selectedRefereeId) && selectedRefereeId !== adminPlayer?.id) {
+      setSelectedRefereeId("");
+    }
+  };
+
+  const handleSave = () => {
+    if (!selectedLosingTeam || !selectedRefereeId) return;
+    onSaveResult(
+      matchIndex,
+      courtNum,
+      {
+        losingTeam: selectedLosingTeam,
+        refereePlayerId: selectedRefereeId,
+      },
+      markCompleted
+    );
+  };
+
+  const handleReset = () => {
+    onResetResult(matchIndex, courtNum);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+      <div className="relative w-full max-w-lg bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl shadow-emerald-950/20 overflow-hidden">
+        {/* Header Modal */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-950/70">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-amber-400/15 border border-amber-400/30 text-amber-300 font-black text-lg">
+              ⚖️
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <span>Hasil Match &amp; Wasit Selanjutnya</span>
+              </h3>
+              <p className="text-xs text-slate-400">
+                Match {matchIndex} • <span className={theme.textClass}>{theme.name}</span>
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Body Modal */}
+        <div className="p-6 space-y-5 max-h-[80vh] overflow-y-auto">
+          {/* LANGKAH 1: PILIH TIM YANG KALAH */}
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                <span className="w-5 h-5 rounded-full bg-slate-800 text-slate-300 flex items-center justify-center text-[10px] font-mono border border-slate-700">
+                  1
+                </span>
+                <span>Tandai Tim yang Kalah</span>
+              </label>
+              <span className="text-[11px] text-slate-400 italic">
+                Klik salah satu tim di bawah
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Card Tim A */}
+              <button
+                type="button"
+                onClick={() => handleSelectLosingTeam("teamA")}
+                className={`p-3.5 rounded-xl border text-left transition-all duration-200 cursor-pointer flex flex-col justify-between relative ${
+                  selectedLosingTeam === "teamA"
+                    ? "bg-rose-950/30 border-rose-500/80 shadow-md shadow-rose-950/40 ring-1 ring-rose-500/60"
+                    : selectedLosingTeam === "teamB"
+                    ? "bg-emerald-950/20 border-emerald-500/40 opacity-90"
+                    : "bg-slate-950/60 border-slate-800 hover:border-slate-700 hover:bg-slate-900/80"
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-bold text-emerald-300">Tim A</span>
+                  {selectedLosingTeam === "teamA" ? (
+                    <span className="px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-300 border border-rose-500/40 text-[10px] font-bold">
+                      ❌ Kalah
+                    </span>
+                  ) : selectedLosingTeam === "teamB" ? (
+                    <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold">
+                      🏆 Menang
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-slate-500 font-medium">Pilih</span>
+                  )}
+                </div>
+
+                <div className="space-y-1 text-xs">
+                  <div className="font-semibold text-slate-200 truncate flex items-center gap-1">
+                    {pA1?.isAdmin && <span>👑</span>}
+                    <span>{pA1?.name || "-"}</span>
+                    <span className="text-slate-400 font-mono text-[10px]">
+                      (L{pA1?.level ?? "-"})
+                    </span>
+                  </div>
+                  <div className="font-semibold text-slate-200 truncate flex items-center gap-1">
+                    {pA2?.isAdmin && <span>👑</span>}
+                    <span>{pA2?.name || "-"}</span>
+                    <span className="text-slate-400 font-mono text-[10px]">
+                      (L{pA2?.level ?? "-"})
+                    </span>
+                  </div>
+                </div>
+              </button>
+
+              {/* Card Tim B */}
+              <button
+                type="button"
+                onClick={() => handleSelectLosingTeam("teamB")}
+                className={`p-3.5 rounded-xl border text-left transition-all duration-200 cursor-pointer flex flex-col justify-between relative ${
+                  selectedLosingTeam === "teamB"
+                    ? "bg-rose-950/30 border-rose-500/80 shadow-md shadow-rose-950/40 ring-1 ring-rose-500/60"
+                    : selectedLosingTeam === "teamA"
+                    ? "bg-emerald-950/20 border-emerald-500/40 opacity-90"
+                    : "bg-slate-950/60 border-slate-800 hover:border-slate-700 hover:bg-slate-900/80"
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-bold text-sky-300">Tim B</span>
+                  {selectedLosingTeam === "teamB" ? (
+                    <span className="px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-300 border border-rose-500/40 text-[10px] font-bold">
+                      ❌ Kalah
+                    </span>
+                  ) : selectedLosingTeam === "teamA" ? (
+                    <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold">
+                      🏆 Menang
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-slate-500 font-medium">Pilih</span>
+                  )}
+                </div>
+
+                <div className="space-y-1 text-xs">
+                  <div className="font-semibold text-slate-200 truncate flex items-center gap-1">
+                    {pB1?.isAdmin && <span>👑</span>}
+                    <span>{pB1?.name || "-"}</span>
+                    <span className="text-slate-400 font-mono text-[10px]">
+                      (L{pB1?.level ?? "-"})
+                    </span>
+                  </div>
+                  <div className="font-semibold text-slate-200 truncate flex items-center gap-1">
+                    {pB2?.isAdmin && <span>👑</span>}
+                    <span>{pB2?.name || "-"}</span>
+                    <span className="text-slate-400 font-mono text-[10px]">
+                      (L{pB2?.level ?? "-"})
+                    </span>
+                  </div>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          {/* LANGKAH 2: PILIH WASIT DARI ORANG YANG KALAH ATAU ADMIN */}
+          {selectedLosingTeam && refereeCandidateOptions.length > 0 && (
+            <div className="space-y-2.5 pt-2 border-t border-slate-800/80 animate-in fade-in duration-200">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                  <span className="w-5 h-5 rounded-full bg-amber-400/20 text-amber-300 flex items-center justify-center text-[10px] font-mono border border-amber-400/40">
+                    2
+                  </span>
+                  <span>Pilih Wasit untuk Match {matchIndex + 1}</span>
+                </label>
+                <span className="text-[11px] text-amber-300/80">
+                  {refereeCandidateOptions.length} Opsi Tersedia
+                </span>
+              </div>
+
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Tunjuk salah satu orang dari tim yang kalah atau Admin (Host) untuk bertugas sebagai wasit di pertandingan selanjutnya.
+              </p>
+
+              <div className="space-y-2">
+                {refereeCandidateOptions.map((player) => {
+                  const wasitCount = refereeStats[player.id] || 0;
+                  const isSelected = selectedRefereeId === player.id;
+                  const otherLosingPlayer = losingPlayers.find((p) => p.id !== player.id);
+                  const isRecommended =
+                    !player.isAdmin &&
+                    otherLosingPlayer &&
+                    wasitCount < (refereeStats[otherLosingPlayer.id] || 0);
+
+                  return (
+                    <button
+                      key={player.id}
+                      type="button"
+                      onClick={() => setSelectedRefereeId(player.id)}
+                      className={`w-full p-3 rounded-xl border text-left transition-all duration-150 cursor-pointer flex items-center justify-between gap-3 ${
+                        isSelected
+                          ? "bg-amber-400/15 border-amber-400/60 ring-1 ring-amber-400/40 shadow-sm shadow-amber-950/30"
+                          : player.isAdmin
+                          ? "bg-purple-950/20 border-purple-800/50 hover:border-purple-600/60 hover:bg-purple-900/30"
+                          : "bg-slate-950/60 border-slate-800 hover:border-slate-700 hover:bg-slate-900"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`w-4 h-4 rounded-full border flex items-center justify-center transition ${
+                            isSelected
+                              ? "border-amber-400 bg-amber-400"
+                              : "border-slate-600 bg-slate-900"
+                          }`}
+                        >
+                          {isSelected && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-slate-950"></span>
+                          )}
+                        </div>
+                        <div>
+                          <div className="font-bold text-xs text-white flex items-center gap-1.5">
+                            {player.isAdmin && <span>👑</span>}
+                            <span>{player.name}</span>
+                            <span className="text-slate-400 font-mono text-[10px]">
+                              {player.isAdmin ? "[Host]" : `[Lvl ${player.level ?? 1}]`}
+                            </span>
+                            {player.isAdmin && (
+                              <span className="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[9px] font-bold">
+                                Opsi Admin
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-slate-400 flex items-center gap-2 mt-0.5">
+                            <span>
+                              Riwayat wasit:{" "}
+                              <strong className="text-amber-300 font-bold">
+                                {wasitCount}x
+                              </strong>
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {isRecommended && (
+                        <span className="px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-[10px] font-semibold shrink-0">
+                          ⭐ Rekomendasi (Paling Jarang)
+                        </span>
+                      )}
+                      {player.isAdmin && (
+                        <span className="px-2 py-0.5 rounded-md bg-purple-500/15 text-purple-300 border border-purple-500/30 text-[10px] font-semibold shrink-0">
+                          👑 Admin (Host)
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* OPSI AUTO-SELESAI */}
+          <div className="pt-2 border-t border-slate-800/80">
+            <label className="flex items-center gap-2.5 p-2.5 rounded-xl bg-slate-950/50 border border-slate-800 text-xs text-slate-300 cursor-pointer select-none hover:border-slate-700 transition">
+              <input
+                type="checkbox"
+                checked={markCompleted}
+                onChange={(e) => setMarkCompleted(e.target.checked)}
+                className="w-4 h-4 rounded border-slate-700 text-emerald-500 focus:ring-emerald-500 accent-emerald-500 cursor-pointer"
+              />
+              <span>Tandai pertandingan Match {matchIndex} Lapangan {courtNum} sebagai Selesai</span>
+            </label>
+          </div>
+
+          {/* TABEL DATA REKAP FREKUENSI WASIT PESERTA (READ-ONLY, TANPA INNER SCROLL) */}
+          <div className="pt-3 border-t border-slate-800/80 space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                <span>📋</span>
+                <span>Data Peserta &amp; Frekuensi Wasit</span>
+              </label>
+              <span className="text-[10px] text-slate-400 font-medium">
+                (Peserta Hadir • {participantsList.length} Pemain)
+              </span>
+            </div>
+
+            <div className="rounded-xl border border-slate-800 bg-slate-950/60 overflow-hidden shadow-inner">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-900/90 text-[10px] uppercase font-bold text-slate-400 border-b border-slate-800">
+                  <tr>
+                    <th className="py-2 px-3 w-10 text-center">No</th>
+                    <th className="py-2 px-3">Nama Peserta</th>
+                    <th className="py-2 px-2 text-center">Level</th>
+                    <th className="py-2 px-3 text-right">Sudah Jadi Wasit</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/40">
+                  {participantsList.map((player, idx) => {
+                    const count = refereeStats[player.id] || 0;
+                    const isLosingTeamMember = losingPlayers.some((p) => p.id === player.id);
+                    const isSelectedWasit = selectedRefereeId === player.id;
+                    const isAbsent = !player.isPresent && !player.isAdmin;
+
+                    return (
+                      <tr
+                        key={player.id}
+                        className={`transition-colors ${
+                          isAbsent
+                            ? "opacity-40 text-slate-500 bg-slate-950/40"
+                            : isSelectedWasit
+                            ? "bg-amber-400/10 text-amber-200"
+                            : isLosingTeamMember
+                            ? "bg-slate-900/40 hover:bg-slate-800/40"
+                            : "hover:bg-slate-900/30"
+                        }`}
+                      >
+                        <td className="py-1.5 px-3 text-center text-slate-500 font-mono text-[11px]">
+                          {idx + 1}
+                        </td>
+                        <td className="py-1.5 px-3 font-semibold text-slate-200">
+                          <div className="flex items-center gap-1.5">
+                            {player.isAdmin && <span>👑</span>}
+                            <span className={player.isAdmin ? "text-purple-300" : isAbsent ? "text-slate-500 line-through" : ""}>
+                              {player.name}
+                            </span>
+                            {player.isAdmin && (
+                              <span className="text-[9px] px-1 py-0.2 rounded bg-purple-500/20 text-purple-300 font-normal">
+                                Host
+                              </span>
+                            )}
+                            {isLosingTeamMember && (
+                              <span className="text-[9px] px-1 py-0.2 rounded bg-rose-500/15 text-rose-300 font-normal">
+                                Kalah M{matchIndex}
+                              </span>
+                            )}
+                            {isSelectedWasit && (
+                              <span className="text-[9px] px-1 py-0.2 rounded bg-amber-400/20 text-amber-300 font-bold">
+                                Dipilih Wasit
+                              </span>
+                            )}
+                            {isAbsent && (
+                              <span className="text-[9px] px-1 py-0.2 rounded bg-slate-800 text-slate-500 font-normal">
+                                Tidak Hadir
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-1.5 px-2 text-center text-slate-400 text-[11px] font-mono">
+                          {player.isAdmin ? "-" : `L${player.level ?? 1}`}
+                        </td>
+                        <td className="py-1.5 px-3 text-right">
+                          <span
+                            className={`inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[11px] font-mono font-bold ${
+                              count > 0
+                                ? "bg-amber-400/15 text-amber-300 border border-amber-400/30"
+                                : "text-slate-500"
+                            }`}
+                          >
+                            <span>{count}x</span>
+                            {count > 0 && <span className="text-[9px]">⚖️</span>}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer Modal */}
+        <div className="flex items-center justify-between px-6 py-4 border-t border-slate-800 bg-slate-950/70">
+          <div>
+            {currentResult && (
+              <button
+                type="button"
+                onClick={handleReset}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold text-rose-300 hover:bg-rose-500/10 border border-rose-500/30 transition cursor-pointer"
+              >
+                ↺ Hapus / Reset Hasil
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:bg-slate-800 transition cursor-pointer"
+            >
+              Batal
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={!selectedLosingTeam || !selectedRefereeId}
+              className="px-4 py-1.5 rounded-lg text-xs font-bold bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 transition shadow-sm cursor-pointer"
+            >
+              Simpan Hasil &amp; Wasit
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const MatchRefereeModal: React.FC<MatchRefereeModalProps> = (props) => {
+  if (!props.isOpen || !props.courtMatch) return null;
+  return (
+    <MatchRefereeModalContent
+      key={`${props.matchIndex}_c${props.courtNum}_${props.isOpen}`}
+      {...props}
+    />
+  );
+};
+
+// ============================================================================
 // MODAL PENYESUAIAN BIAYA MANUAL / DISKON
 // ============================================================================
 
@@ -2592,6 +3098,15 @@ export default function BadmintonRotationApp() {
     Record<string, boolean>
   >({});
 
+  // State Hasil Pertandingan & Penunjukan Wasit (Key: `${matchIndex}_c${courtNumber}`, Value: CourtResult)
+  const [courtResults, setCourtResults] = useState<Record<string, CourtResult>>({});
+
+  // State Modal Penunjukan Wasit & Hasil Pertandingan
+  const [refereeModalMatch, setRefereeModalMatch] = useState<{
+    matchIdx: number;
+    courtNum: number;
+  } | null>(null);
+
   const [newPlayerName, setNewPlayerName] = useState("");
   const [newPlayerLevel, setNewPlayerLevel] = useState<number>(3);
   const [newPlayerIsPresent, setNewPlayerIsPresent] = useState<boolean>(true);
@@ -2631,8 +3146,8 @@ export default function BadmintonRotationApp() {
     Record<string, "QRIS" | "Cash" | "">
   >({});
 
-  // Guard: jangan autosave sebelum restore dari localStorage selesai
-  const isRestoredRef = useRef(false);
+  // Guard: jangan autosave sebelum restore dari localStorage selesai & state ter-update
+  const [isRestored, setIsRestored] = useState<boolean>(false);
 
   // ---- RESTORE sesi dari localStorage setelah hydration (hanya client) ----
   useEffect(() => {
@@ -2649,14 +3164,15 @@ export default function BadmintonRotationApp() {
       if (saved.paymentStatuses) setPaymentStatuses(saved.paymentStatuses);
       if (saved.courtPrice !== undefined) setCourtPrice(saved.courtPrice);
       if (saved.shuttlecockPrice !== undefined) setShuttlecockPrice(saved.shuttlecockPrice);
+      if (saved.courtResults) setCourtResults(saved.courtResults);
     }
-    isRestoredRef.current = true;
+    setIsRestored(true);
   }, []);
 
   // ---- AUTOSAVE ke localStorage setiap kali data sesi berubah ----
   useEffect(() => {
     // Skip autosave pada render pertama (sebelum restore selesai)
-    if (!isRestoredRef.current) return;
+    if (!isRestored) return;
     saveSession({
       players,
       projectedMatchCount,
@@ -2669,11 +3185,14 @@ export default function BadmintonRotationApp() {
       paymentStatuses,
       courtPrice,
       shuttlecockPrice,
+      courtResults,
     });
   }, [
+    isRestored,
     players, projectedMatchCount, courtCount, overrides,
     completedMatches, completedCourts, matchCourtShuttlecocks,
     customFees, paymentStatuses, courtPrice, shuttlecockPrice,
+    courtResults,
   ]);
 
   const handleTogglePresent = useCallback((playerId: string) => {
@@ -2760,6 +3279,7 @@ export default function BadmintonRotationApp() {
       setMatchCourtShuttlecocks({});
       setCustomFees({});
       setPaymentStatuses({});
+      setCourtResults({});
     }
   }, []);
 
@@ -2777,6 +3297,7 @@ export default function BadmintonRotationApp() {
       setPaymentStatuses({});
       setCourtPrice(62500);
       setShuttlecockPrice(8500);
+      setCourtResults({});
       setSelectedMatchIdx(null);
       clearSession();
     }
@@ -2796,6 +3317,7 @@ export default function BadmintonRotationApp() {
       paymentStatuses,
       courtPrice,
       shuttlecockPrice,
+      courtResults,
     };
     const json = JSON.stringify(sessionData, null, 2);
     const blob = new Blob([json], { type: "application/json" });
@@ -2817,6 +3339,7 @@ export default function BadmintonRotationApp() {
     players, projectedMatchCount, courtCount, overrides,
     completedMatches, completedCourts, matchCourtShuttlecocks,
     customFees, paymentStatuses, courtPrice, shuttlecockPrice,
+    courtResults,
   ]);
 
   // ---- IMPORT DATA dari file JSON ----
@@ -2851,6 +3374,7 @@ export default function BadmintonRotationApp() {
         setPaymentStatuses(data.paymentStatuses ?? {});
         setCourtPrice(data.courtPrice ?? 62500);
         setShuttlecockPrice(data.shuttlecockPrice ?? 8500);
+        setCourtResults(data.courtResults ?? {});
         setSelectedMatchIdx(null);
 
         // Simpan juga ke localStorage
@@ -3097,6 +3621,59 @@ export default function BadmintonRotationApp() {
     [projections, courtCount]
   );
 
+  const handleSaveCourtResult = useCallback(
+    (
+      matchIdx: number,
+      courtNum: number,
+      result: { losingTeam: "teamA" | "teamB"; refereePlayerId: string },
+      markCompleted: boolean
+    ) => {
+      const key = `${matchIdx}_c${courtNum}`;
+      setCourtResults((prev) => ({
+        ...prev,
+        [key]: {
+          losingTeam: result.losingTeam,
+          refereePlayerId: result.refereePlayerId,
+          refereeForMatch: matchIdx + 1,
+          assignedAt: new Date().toISOString(),
+        },
+      }));
+
+      if (markCompleted) {
+        handleToggleCourtCompleted(matchIdx, courtNum, true);
+      }
+      setRefereeModalMatch(null);
+    },
+    [handleToggleCourtCompleted]
+  );
+
+  const handleResetCourtResult = useCallback(
+    (matchIdx: number, courtNum: number) => {
+      const key = `${matchIdx}_c${courtNum}`;
+      setCourtResults((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+      setRefereeModalMatch(null);
+    },
+    []
+  );
+
+  const refereeStats = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const p of players) {
+      counts[p.id] = 0;
+    }
+    for (const key of Object.keys(courtResults)) {
+      const res = courtResults[key];
+      if (res && res.refereePlayerId) {
+        counts[res.refereePlayerId] = (counts[res.refereePlayerId] || 0) + 1;
+      }
+    }
+    return counts;
+  }, [players, courtResults]);
+
   const totalSessionShuttlecocks = useMemo(() => {
     return Object.values(matchCourtShuttlecocks).reduce(
       (sum, val) =>
@@ -3326,22 +3903,30 @@ export default function BadmintonRotationApp() {
 
           {/* Quick Actions & Setting Proyeksi & Lapangan */}
           <div className="flex flex-wrap items-center gap-2.5">
-            {/* Setting Proyeksi Match */}
-            <div className="flex items-center bg-slate-800/80 border border-slate-700/60 rounded-xl px-2.5 py-1">
-              <label htmlFor="projection-input" className="text-xs text-slate-400 mr-2 font-medium">Proyeksi:</label>
-              <input
-                id="projection-input"
-                type="number"
-                min={1}
-                max={18}
-                value={projectedMatchCount}
-                onChange={(e) => {
-                  const val = Math.max(1, Math.min(18, Number(e.target.value) || 1));
-                  setProjectedMatchCount(val);
-                }}
-                className="w-10 bg-slate-900 border border-slate-700 rounded-md text-center text-xs font-bold text-white py-0.5 focus:outline-none focus:border-emerald-400"
-              />
-              <span className="text-xs text-slate-400 ml-1 font-medium">Match</span>
+            {/* Setting Proyeksi Match (1 s/d 18 Match) */}
+            <div className="flex items-center bg-slate-800/80 border border-slate-700/60 rounded-xl px-2 py-1 gap-1 shadow-sm">
+              <span className="text-xs text-slate-400 font-medium mr-1">Match:</span>
+              <button
+                type="button"
+                onClick={() => setProjectedMatchCount((prev) => Math.max(1, prev - 1))}
+                disabled={projectedMatchCount <= 1}
+                className="w-5 h-5 rounded bg-slate-900 hover:bg-slate-700 disabled:opacity-30 border border-slate-700 text-white font-bold flex items-center justify-center text-xs transition cursor-pointer"
+                title="Kurangi proyeksi match"
+              >
+                -
+              </button>
+              <span className="w-5 text-center text-xs font-bold text-emerald-300 font-mono">
+                {projectedMatchCount}
+              </span>
+              <button
+                type="button"
+                onClick={() => setProjectedMatchCount((prev) => Math.min(18, prev + 1))}
+                disabled={projectedMatchCount >= 18}
+                className="w-5 h-5 rounded bg-slate-900 hover:bg-slate-700 disabled:opacity-30 border border-slate-700 text-white font-bold flex items-center justify-center text-xs transition cursor-pointer"
+                title="Tambah proyeksi match"
+              >
+                +
+              </button>
             </div>
 
             {/* Setting Jumlah Lapangan (1 s/d 5 Lapangan) */}
@@ -3723,15 +4308,30 @@ export default function BadmintonRotationApp() {
                         </td>
                         <td className="py-2 px-4 text-center font-mono text-slate-300">
                           {player.isPresent ? (
-                            <span>
-                              {pStats?.matchesPlayed || 0}m /{" "}
-                              <strong className="text-emerald-400 font-bold">
-                                {pStats?.shuttlecockCount || 0}🏸
-                              </strong>
-                              <span className="text-[10px] text-slate-500 block">
-                                ({Array.from({ length: courtCount }, (_, i) => `c${i + 1}: ${pStats?.courtBreakdown?.[`c${i + 1}`] || 0}`).join(", ")})
+                            <div>
+                              <span>
+                                {pStats?.matchesPlayed || 0}m /{" "}
+                                <strong className="text-emerald-400 font-bold">
+                                  {pStats?.shuttlecockCount || 0}🏸
+                                </strong>
+                                <span className="text-[10px] text-slate-500 block">
+                                  ({Array.from({ length: courtCount }, (_, i) => `c${i + 1}: ${pStats?.courtBreakdown?.[`c${i + 1}`] || 0}`).join(", ")})
+                                </span>
                               </span>
-                            </span>
+                              <div className="mt-1 flex items-center justify-center gap-1">
+                                <span
+                                  className={`inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[10px] font-semibold border ${
+                                    (refereeStats[player.id] || 0) > 0
+                                      ? "bg-amber-400/15 text-amber-300 border-amber-400/35"
+                                      : "bg-slate-900/60 text-slate-500 border-slate-800"
+                                  }`}
+                                  title={`Total bertugas sebagai wasit: ${refereeStats[player.id] || 0} kali`}
+                                >
+                                  <span>⚖️</span>
+                                  <span>{refereeStats[player.id] || 0}x wasit</span>
+                                </span>
+                              </div>
+                            </div>
                           ) : (
                             <span className="text-slate-400">-</span>
                           )}
@@ -3895,10 +4495,23 @@ export default function BadmintonRotationApp() {
                         const cockCount =
                           matchCourtShuttlecocks[proj.matchIndex]?.[`court${cNum}`] ?? 0;
 
-                        const isCourtCompleted = Boolean(
-                          completedCourts[`${proj.matchIndex}_c${cNum}`]
-                        );
+                        const courtKey = `${proj.matchIndex}_c${cNum}`;
+                        const isCourtCompleted = Boolean(completedCourts[courtKey]);
                         const isCourtOverridden = Boolean(courtMatch?.isOverridden);
+
+                        const courtResult = courtResults[courtKey];
+                        const nextRefereePlayer = courtResult?.refereePlayerId
+                          ? playerMap.get(courtResult.refereePlayerId)
+                          : null;
+
+                        // Wasit yang bertugas memimpin match ini (dari match sebelumnya di lapangan ini)
+                        const prevCourtResult =
+                          proj.matchIndex > 1
+                            ? courtResults[`${proj.matchIndex - 1}_c${cNum}`]
+                            : null;
+                        const currentRefereePlayer = prevCourtResult?.refereePlayerId
+                          ? playerMap.get(prevCourtResult.refereePlayerId)
+                          : null;
 
                         const pA1 = courtMatch?.teamA?.player1Id ? playerMap.get(courtMatch.teamA.player1Id) : null;
                         const pA2 = courtMatch?.teamA?.player2Id ? playerMap.get(courtMatch.teamA.player2Id) : null;
@@ -3910,9 +4523,9 @@ export default function BadmintonRotationApp() {
                         return (
                           <tr
                             key={`m${proj.matchIndex}-c${cNum}`}
-                            className={`transition-colors ${
+                            className={`transition-all duration-200 ${
                               isCourtCompleted
-                                ? "bg-emerald-950/20 hover:bg-emerald-950/30 border-l-4 border-l-emerald-400/70"
+                                ? "bg-slate-900/85 hover:bg-slate-900 border-l-4 border-l-emerald-400 shadow-inner"
                                 : "hover:bg-slate-750/30 border-l-4 border-l-transparent"
                             }`}
                           >
@@ -3921,14 +4534,17 @@ export default function BadmintonRotationApp() {
                               <button
                                 type="button"
                                 onClick={() => setSelectedMatchIdx(proj.matchIndex)}
-                                className={`inline-flex items-center justify-center font-mono font-bold text-xs px-2.5 py-1 rounded-md border transition ${
+                                className={`inline-flex items-center justify-center gap-1 font-mono font-bold text-xs px-2.5 py-1 rounded-md border transition ${
                                   isCourtCompleted
-                                    ? "bg-emerald-400/15 text-emerald-200 border-emerald-400/30 hover:bg-emerald-400/25"
+                                    ? "bg-emerald-500/20 text-emerald-200 border-emerald-400/40 hover:bg-emerald-500/30 shadow-sm"
                                     : "bg-slate-800 text-emerald-300 border-slate-700 hover:border-slate-600"
                                 }`}
                                 title={`Lihat detail seluruh Match ${proj.matchIndex}`}
                               >
-                                M{proj.matchIndex}
+                                {isCourtCompleted && (
+                                  <span className="text-emerald-300 text-[11px] font-black leading-none">✓</span>
+                                )}
+                                <span>M{proj.matchIndex}</span>
                               </button>
                             </td>
 
@@ -3936,11 +4552,21 @@ export default function BadmintonRotationApp() {
                             <td className="py-3 px-4">
                               <div className="flex items-center gap-1.5 flex-wrap">
                                 <span
-                                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border shadow-sm ${theme.badgeClass}`}
+                                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border shadow-sm ${
+                                    isCourtCompleted ? `${theme.badgeClass} opacity-85` : theme.badgeClass
+                                  }`}
                                 >
                                   <span className={`w-1.5 h-1.5 rounded-full ${theme.accentBg}`}></span>
                                   {theme.name}
                                 </span>
+                                {isCourtCompleted && (
+                                  <span
+                                    className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold"
+                                    title="Pertandingan lapangan ini sudah selesai"
+                                  >
+                                    Selesai
+                                  </span>
+                                )}
                                 {isCourtOverridden && (
                                   <span
                                     className="text-[10px] px-1.5 py-0.5 rounded bg-amber-400/15 text-amber-200 border border-amber-400/30 font-semibold"
@@ -3955,34 +4581,137 @@ export default function BadmintonRotationApp() {
                             {/* Kolom Pertandingan (Siapa vs Siapa) */}
                             <td className="py-3 px-4">
                               {hasMatch ? (
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <div className="flex items-center gap-1.5 font-bold text-sm">
-                                    <span className="text-emerald-300">
-                                      {pA1?.isAdmin && <span className="mr-0.5" title="Admin / Host">👑</span>}
-                                      {pA1?.name}
-                                    </span>
-                                    <span className="text-slate-400 font-normal text-xs">&amp;</span>
-                                    <span className="text-emerald-300">
-                                      {pA2?.isAdmin && <span className="mr-0.5" title="Admin / Host">👑</span>}
-                                      {pA2?.name}
-                                    </span>
+                                <div className="space-y-1">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    {/* Tim A */}
+                                    <div
+                                      className={`flex items-center gap-1.5 text-sm transition ${
+                                        courtResult?.losingTeam === "teamA"
+                                          ? "opacity-75 font-medium"
+                                          : isCourtCompleted
+                                          ? "font-bold"
+                                          : "font-bold"
+                                      }`}
+                                    >
+                                      <span className={courtResult?.losingTeam === "teamA" ? "text-slate-300 line-through decoration-slate-600 inline-flex items-center gap-0.5" : "text-emerald-300 inline-flex items-center gap-0.5"}>
+                                        {pA1?.isAdmin && <span className="mr-0.5" title="Admin / Host">👑</span>}
+                                        <span>{pA1?.name}</span>
+                                        {courtResult?.losingTeam === "teamA" && courtResult?.refereePlayerId === pA1?.id && (
+                                          <span
+                                            className="ml-1 text-amber-300 not-italic no-underline font-bold text-xs select-none"
+                                            title={`Ditunjuk sebagai wasit Match ${proj.matchIndex + 1}`}
+                                          >
+                                            ⚖️
+                                          </span>
+                                        )}
+                                      </span>
+                                      <span className="text-slate-400 font-normal text-xs">&amp;</span>
+                                      <span className={courtResult?.losingTeam === "teamA" ? "text-slate-300 line-through decoration-slate-600 inline-flex items-center gap-0.5" : "text-emerald-300 inline-flex items-center gap-0.5"}>
+                                        {pA2?.isAdmin && <span className="mr-0.5" title="Admin / Host">👑</span>}
+                                        <span>{pA2?.name}</span>
+                                        {courtResult?.losingTeam === "teamA" && courtResult?.refereePlayerId === pA2?.id && (
+                                          <span
+                                            className="ml-1 text-amber-300 not-italic no-underline font-bold text-xs select-none"
+                                            title={`Ditunjuk sebagai wasit Match ${proj.matchIndex + 1}`}
+                                          >
+                                            ⚖️
+                                          </span>
+                                        )}
+                                      </span>
+                                      {courtResult?.losingTeam === "teamA" ? (
+                                        <span className="text-[9px] px-1 py-0.2 rounded bg-rose-500/15 text-rose-300 border border-rose-500/30 font-semibold flex items-center gap-1">
+                                          <span>Kalah</span>
+                                          {courtResult?.refereePlayerId === "admin" && !pA1?.isAdmin && !pA2?.isAdmin && (
+                                            <span className="text-purple-300 font-bold" title={`Wasit Match ${proj.matchIndex + 1}: Admin (Host)`}>
+                                              (⚖️ Admin)
+                                            </span>
+                                          )}
+                                        </span>
+                                      ) : courtResult?.losingTeam === "teamB" ? (
+                                        <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold flex items-center gap-0.5">
+                                          <span>🏆</span>
+                                          <span>Menang</span>
+                                        </span>
+                                      ) : null}
+                                    </div>
+
+                                    {/* Tombol Interaktif VS */}
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setRefereeModalMatch({
+                                          matchIdx: proj.matchIndex,
+                                          courtNum: cNum,
+                                        })
+                                      }
+                                      className="px-1.5 py-0.2 rounded text-[9px] font-bold tracking-wider uppercase bg-rose-400/15 text-rose-300 border border-rose-400/25 hover:bg-rose-400/30 hover:border-rose-400/50 hover:text-white transition cursor-pointer"
+                                      title="Klik untuk tandai tim yang kalah & tentukan wasit"
+                                    >
+                                      VS
+                                    </button>
+
+                                    {/* Tim B */}
+                                    <div
+                                      className={`flex items-center gap-1.5 text-sm transition ${
+                                        courtResult?.losingTeam === "teamB"
+                                          ? "opacity-75 font-medium"
+                                          : isCourtCompleted
+                                          ? "font-bold"
+                                          : "font-bold"
+                                      }`}
+                                    >
+                                      <span className={courtResult?.losingTeam === "teamB" ? "text-slate-300 line-through decoration-slate-600 inline-flex items-center gap-0.5" : "text-sky-300 inline-flex items-center gap-0.5"}>
+                                        {pB1?.isAdmin && <span className="mr-0.5" title="Admin / Host">👑</span>}
+                                        <span>{pB1?.name}</span>
+                                        {courtResult?.losingTeam === "teamB" && courtResult?.refereePlayerId === pB1?.id && (
+                                          <span
+                                            className="ml-1 text-amber-300 not-italic no-underline font-bold text-xs select-none"
+                                            title={`Ditunjuk sebagai wasit Match ${proj.matchIndex + 1}`}
+                                          >
+                                            ⚖️
+                                          </span>
+                                        )}
+                                      </span>
+                                      <span className="text-slate-400 font-normal text-xs">&amp;</span>
+                                      <span className={courtResult?.losingTeam === "teamB" ? "text-slate-300 line-through decoration-slate-600 inline-flex items-center gap-0.5" : "text-sky-300 inline-flex items-center gap-0.5"}>
+                                        {pB2?.isAdmin && <span className="mr-0.5" title="Admin / Host">👑</span>}
+                                        <span>{pB2?.name}</span>
+                                        {courtResult?.losingTeam === "teamB" && courtResult?.refereePlayerId === pB2?.id && (
+                                          <span
+                                            className="ml-1 text-amber-300 not-italic no-underline font-bold text-xs select-none"
+                                            title={`Ditunjuk sebagai wasit Match ${proj.matchIndex + 1}`}
+                                          >
+                                            ⚖️
+                                          </span>
+                                        )}
+                                      </span>
+                                      {courtResult?.losingTeam === "teamB" ? (
+                                        <span className="text-[9px] px-1 py-0.2 rounded bg-rose-500/15 text-rose-300 border border-rose-500/30 font-semibold flex items-center gap-1">
+                                          <span>Kalah</span>
+                                          {courtResult?.refereePlayerId === "admin" && !pB1?.isAdmin && !pB2?.isAdmin && (
+                                            <span className="text-purple-300 font-bold" title={`Wasit Match ${proj.matchIndex + 1}: Admin (Host)`}>
+                                              (⚖️ Admin)
+                                            </span>
+                                          )}
+                                        </span>
+                                      ) : courtResult?.losingTeam === "teamA" ? (
+                                        <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold flex items-center gap-0.5">
+                                          <span>🏆</span>
+                                          <span>Menang</span>
+                                        </span>
+                                      ) : null}
+                                    </div>
                                   </div>
 
-                                  <span className="px-1.5 py-0.2 rounded text-[9px] font-bold tracking-wider uppercase bg-rose-400/15 text-rose-300 border border-rose-400/25">
-                                    VS
-                                  </span>
-
-                                  <div className="flex items-center gap-1.5 font-bold text-sm">
-                                    <span className="text-sky-300">
-                                      {pB1?.isAdmin && <span className="mr-0.5" title="Admin / Host">👑</span>}
-                                      {pB1?.name}
-                                    </span>
-                                    <span className="text-slate-400 font-normal text-xs">&amp;</span>
-                                    <span className="text-sky-300">
-                                      {pB2?.isAdmin && <span className="mr-0.5" title="Admin / Host">👑</span>}
-                                      {pB2?.name}
-                                    </span>
-                                  </div>
+                                  {/* Info Wasit yang Sedang Memimpin Match Ini */}
+                                  {currentRefereePlayer && (
+                                    <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                                      <span className="inline-flex items-center gap-1 text-[11px] text-sky-300/90 font-medium bg-sky-950/30 border border-sky-500/20 px-2 py-0.5 rounded-md">
+                                        <span>⚖️ Dipimpin Wasit:</span>
+                                        <strong className="text-sky-200">{currentRefereePlayer.name}</strong>
+                                      </span>
+                                    </div>
+                                  )}
                                 </div>
                               ) : (
                                 <span className="text-xs text-slate-400 italic">
@@ -4055,8 +4784,8 @@ export default function BadmintonRotationApp() {
                                 }
                                 className={`inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold border transition shadow-sm select-none cursor-pointer ${
                                   isCourtCompleted
-                                    ? "bg-emerald-400/15 text-emerald-200 border-emerald-400/35 hover:bg-emerald-400/25"
-                                    : "bg-slate-800 text-slate-300 border-slate-700 hover:border-slate-600 hover:text-white"
+                                    ? "bg-emerald-500/25 text-emerald-200 border-emerald-400/50 hover:bg-emerald-500/35 shadow-sm shadow-emerald-950/40"
+                                    : "bg-slate-800 text-slate-400 border-slate-700 hover:border-slate-600 hover:text-white"
                                 }`}
                                 title={
                                   isCourtCompleted
@@ -4066,7 +4795,7 @@ export default function BadmintonRotationApp() {
                               >
                                 <span
                                   className={`w-1.5 h-1.5 rounded-full ${
-                                    isCourtCompleted ? "bg-emerald-300" : "bg-slate-400"
+                                    isCourtCompleted ? "bg-emerald-300 shadow-sm shadow-emerald-400" : "bg-slate-500"
                                   }`}
                                 ></span>
                                 <span>{isCourtCompleted ? "✓ Selesai" : "⏳ Belum"}</span>
@@ -4075,20 +4804,45 @@ export default function BadmintonRotationApp() {
 
                             {/* Kolom Aksi */}
                             <td className="py-3 px-4 text-center">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setEditingCourtMatch({
-                                    matchIdx: proj.matchIndex,
-                                    courtNum: cNum,
-                                  })
-                                }
-                                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 hover:border-slate-600 transition shadow-sm active:scale-95 cursor-pointer"
-                                title={`Edit formasi Lapangan ${cNum} saja pada Match ${proj.matchIndex}`}
-                              >
-                                <span>✏️</span>
-                                <span>Edit</span>
-                              </button>
+                              <div className="inline-flex items-center gap-1.5 justify-center">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setRefereeModalMatch({
+                                      matchIdx: proj.matchIndex,
+                                      courtNum: cNum,
+                                    })
+                                  }
+                                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold border transition shadow-sm active:scale-95 cursor-pointer ${
+                                    courtResult
+                                      ? "bg-amber-400/15 text-amber-200 border-amber-400/40 hover:bg-amber-400/25 shadow-sm shadow-amber-950/30"
+                                      : "bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-amber-300 border-slate-700 hover:border-slate-600"
+                                  }`}
+                                  title={
+                                    courtResult
+                                      ? `Hasil tercatat: Wasit M${proj.matchIndex + 1} (${nextRefereePlayer?.name || "-"}). Klik untuk ubah.`
+                                      : "Tandai tim kalah & pilih wasit untuk match berikutnya"
+                                  }
+                                >
+                                  <span>⚖️</span>
+                                  <span className="hidden sm:inline">{courtResult ? "Wasit ✓" : "Wasit"}</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setEditingCourtMatch({
+                                      matchIdx: proj.matchIndex,
+                                      courtNum: cNum,
+                                    })
+                                  }
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 hover:border-slate-600 transition shadow-sm active:scale-95 cursor-pointer"
+                                  title={`Edit formasi Lapangan ${cNum} saja pada Match ${proj.matchIndex}`}
+                                >
+                                  <span>✏️</span>
+                                  <span className="hidden sm:inline">Edit</span>
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );
@@ -4514,6 +5268,45 @@ export default function BadmintonRotationApp() {
           )}
           onSave={handleSaveCourtOverride}
           onReset={handleResetCourtOverride}
+        />
+      )}
+
+      {/* =====================================================================
+          MODAL PENUNJUKAN WASIT & CATAT TIM KALAH
+      ====================================================================== */}
+      {refereeModalMatch && (
+        <MatchRefereeModal
+          isOpen={refereeModalMatch !== null}
+          onClose={() => setRefereeModalMatch(null)}
+          matchIndex={refereeModalMatch.matchIdx}
+          courtNum={refereeModalMatch.courtNum}
+          courtMatch={
+            (() => {
+              const proj = projections.find(
+                (p) => p.matchIndex === refereeModalMatch.matchIdx
+              );
+              if (!proj) return null;
+              return (
+                proj.courts?.[refereeModalMatch.courtNum - 1] ||
+                (refereeModalMatch.courtNum === 1
+                  ? proj.court1
+                  : refereeModalMatch.courtNum === 2
+                  ? proj.court2
+                  : null)
+              );
+            })()
+          }
+          playerMap={playerMap}
+          allPlayers={players}
+          currentResult={
+            courtResults[`${refereeModalMatch.matchIdx}_c${refereeModalMatch.courtNum}`] || null
+          }
+          isCourtCompleted={Boolean(
+            completedCourts[`${refereeModalMatch.matchIdx}_c${refereeModalMatch.courtNum}`]
+          )}
+          refereeStats={refereeStats}
+          onSaveResult={handleSaveCourtResult}
+          onResetResult={handleResetCourtResult}
         />
       )}
 
