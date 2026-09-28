@@ -43,6 +43,8 @@ export interface CourtMatch {
   teamBLevel: number;
   levelDiff: number;
   isOverridden?: boolean; // Apakah pertandingan di lapangan ini dimodifikasi manual
+  isSwapped?: boolean; // Apakah pertandingan di lapangan ini hanya ditukar posisinya
+  swapType?: "horizontal" | "cross";
 }
 
 /**
@@ -88,6 +90,19 @@ export interface MatchOverride {
   court4?: { teamA: [string, string]; teamB: [string, string] } | null;
   court5?: { teamA: [string, string]; teamB: [string, string] } | null;
   overriddenCourts?: Record<number, boolean>; // Catatan spesifik court mana saja yang dimodifikasi manual
+  emptyCourts?: Record<number, boolean>; // Lapangan yang sengaja dikosongkan/dihapus
+  courtSwaps?: Record<number, "horizontal" | "cross" | boolean>; // Catatan lapangan yang ditukar posisinya (bukan override)
+}
+
+/**
+ * Data Pemain yang Pulang Duluan Sebelum Sesi Selesai
+ */
+export interface EarlyDepartureInfo {
+  fee: number;
+  autoFee: number;
+  shuttlecockCount: number;
+  matchesPlayed: number;
+  playedMatchCourts: Record<number, string>; // matchIndex -> "c1" | "c2", dst.
 }
 
 /**
@@ -244,6 +259,7 @@ interface SessionData {
   courtPrice: number;
   shuttlecockPrice: number;
   courtResults?: Record<string, CourtResult>;
+  earlyDepartures?: Record<string, EarlyDepartureInfo>;
 }
 
 function loadSession(): Partial<SessionData> | null {
@@ -747,9 +763,17 @@ export function generateMatchProjections(
       return null;
     };
 
+    const isCourtMarkedEmpty = (c: number) => {
+      const ov = overrides[m];
+      if (!ov) return false;
+      if (ov.emptyCourts?.[c]) return true;
+      if (ov.courts && ov.courts[c] === null) return true;
+      return false;
+    };
+
     let hasAnyOverride = false;
     for (let c = 1; c <= courtCount; c++) {
-      if (getOverrideForCourt(c)) {
+      if (getOverrideForCourt(c) || isCourtMarkedEmpty(c)) {
         hasAnyOverride = true;
         break;
       }
@@ -761,6 +785,11 @@ export function generateMatchProjections(
       const unassignedCourtNums: number[] = [];
 
       for (let c = 1; c <= courtCount; c++) {
+        if (isCourtMarkedEmpty(c)) {
+          courtsResult[c - 1] = null;
+          continue;
+        }
+
         const cOv = getOverrideForCourt(c);
         if (cOv) {
           const [a1, a2] = cOv.teamA;
@@ -770,12 +799,17 @@ export function generateMatchProjections(
           const pB1 = playerMap.get(b1);
           const pB2 = playerMap.get(b2);
 
-          if (pA1 && pA2 && pB1 && pB2) {
+          const allPresent = Boolean(pA1?.isPresent && pA2?.isPresent && pB1?.isPresent && pB2?.isPresent);
+          if (pA1 && pA2 && pB1 && pB2 && allPresent) {
             const hasAdmin = Boolean(pA1.isAdmin || pA2.isAdmin || pB1.isAdmin || pB2.isAdmin);
             const teamALvl = (pA1.level ?? 0) + (pA2.level ?? 0);
             const teamBLvl = (pB1.level ?? 0) + (pB2.level ?? 0);
             const levelDiff = hasAdmin ? 0 : Math.abs(teamALvl - teamBLvl);
-            const isCourtOverridden = Boolean(overrides[m]?.overriddenCourts?.[c]);
+            const swapVal = overrides[m]?.courtSwaps?.[c];
+            const isCourtSwapped = Boolean(swapVal);
+            const swapType: "horizontal" | "cross" | undefined =
+              typeof swapVal === "string" ? swapVal : isCourtSwapped ? "horizontal" : undefined;
+            const isCourtOverridden = !isCourtSwapped && Boolean(overrides[m]?.overriddenCourts?.[c]);
 
             courtsResult[c - 1] = {
               courtNumber: c,
@@ -785,6 +819,8 @@ export function generateMatchProjections(
               teamBLevel: teamBLvl,
               levelDiff,
               isOverridden: isCourtOverridden,
+              isSwapped: isCourtSwapped,
+              swapType,
             };
             playingIds.add(a1);
             playingIds.add(a2);
@@ -1054,7 +1090,12 @@ export function generateMatchProjections(
       court5: courtMatches[4] || null,
       playingPlayerIds: playingIds,
       waitingPlayerIds,
-      isOverridden,
+      isOverridden: Boolean(
+        overrides[m] &&
+        (overrides[m].overriddenCourts
+          ? Object.values(overrides[m].overriddenCourts!).some(Boolean)
+          : false)
+      ),
       isCompleted: false,
       playerCourts,
       waitCountsSnapshot,
@@ -1271,36 +1312,36 @@ const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="relative w-full max-w-3xl bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl shadow-emerald-950/20 overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="relative w-full max-w-3xl bg-[#F4F7FA] border border-white/80 rounded-2xl shadow-2xl overflow-hidden text-slate-800">
         {/* Header Modal */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-950/60">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-[#E7EEF4]/90">
           <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-black text-lg">
+            <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-emerald-100 border border-emerald-300 text-emerald-800 font-black text-lg">
               M{matchIndex}
             </div>
             <div>
-              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+              <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
                 Detail Pertandingan Match {matchIndex}
                 {isCompleted && (
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold flex items-center gap-1">
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold flex items-center gap-1">
                     <span>✓</span> Selesai (Terkunci)
                   </span>
                 )}
                 {projection.isOverridden && (
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 font-semibold">
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 font-semibold">
                     Edited / Override
                   </span>
                 )}
               </h3>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-slate-500">
                 Susunan pemain &amp; input shuttlecock per lapangan (1 s/d {courtCount} lapangan).
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition"
+            className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-200/60 transition cursor-pointer"
           >
             ✕
           </button>
@@ -1309,20 +1350,20 @@ const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
         {/* Body Modal */}
         <div className="p-6 space-y-5 max-h-[75vh] overflow-y-auto">
           {errorMsg && (
-            <div className="p-3 bg-rose-500/10 border border-rose-500/40 rounded-xl text-xs font-semibold text-rose-300 flex items-center gap-2">
+            <div className="p-3 bg-rose-50 border border-rose-300 rounded-xl text-xs font-semibold text-rose-700 flex items-center gap-2">
               <span>⚠️</span>
               <span>{errorMsg}</span>
             </div>
           )}
 
           {/* Mode Toggle & Keterangan Status */}
-          <div className="flex flex-wrap items-center justify-between bg-slate-950/70 p-3 rounded-xl border border-slate-800 gap-3">
+          <div className="flex flex-wrap items-center justify-between bg-white p-3 rounded-xl border border-slate-200 gap-3 shadow-xs">
             <div className="flex items-center gap-3">
               <label
                 className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-bold cursor-pointer transition select-none ${
                   isCompleted
-                    ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-sm"
-                    : "bg-slate-900 text-slate-400 border-slate-700 hover:border-slate-500 hover:text-slate-200"
+                    ? "bg-emerald-100 text-emerald-800 border-emerald-300 shadow-sm"
+                    : "bg-white text-slate-600 border-slate-300 hover:border-slate-400 hover:text-slate-800"
                 }`}
                 title="Tandai match ini selesai untuk membekukan formasi dari perubahan"
               >
@@ -1330,14 +1371,14 @@ const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
                   type="checkbox"
                   checked={isCompleted}
                   onChange={(e) => onToggleCompleted(matchIndex, e.target.checked)}
-                  className="w-4 h-4 rounded border-slate-600 text-emerald-500 accent-emerald-500 cursor-pointer"
+                  className="w-4 h-4 rounded border-slate-300 text-emerald-600 accent-emerald-600 cursor-pointer"
                 />
                 <span>{isCompleted ? "Match Selesai (Terkunci) ✓" : "Tandai Match Selesai"}</span>
               </label>
 
-              <span className="text-xs text-slate-300 font-medium hidden sm:inline">
+              <span className="text-xs text-slate-600 font-medium hidden sm:inline">
                 Formasi:{" "}
-                <strong className={projection.isOverridden ? "text-amber-400" : "text-emerald-400"}>
+                <strong className={projection.isOverridden ? "text-amber-700" : "text-emerald-700"}>
                   {projection.isOverridden ? "Manual Override" : "Otomatis"}
                 </strong>
               </span>
@@ -1345,10 +1386,10 @@ const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
 
             <button
               onClick={() => setIsEditMode(!isEditMode)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
                 isEditMode
-                  ? "bg-slate-800 text-slate-200 hover:bg-slate-700"
-                  : "bg-emerald-500 text-slate-950 hover:bg-emerald-400"
+                  ? "bg-slate-200 text-slate-700 hover:bg-slate-300"
+                  : "bg-[#357564] text-white hover:bg-[#285B4E] shadow-sm"
               }`}
             >
               {isEditMode ? "Tutup Mode Edit" : "✏️ Edit Formasi Manual"}
@@ -1368,7 +1409,7 @@ const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
               return (
                 <div
                   key={cNum}
-                  className={`bg-slate-950/70 border rounded-xl p-4 relative overflow-hidden ${theme.borderClass}`}
+                  className={`bg-white border rounded-xl p-4 relative overflow-hidden shadow-xs ${theme.borderClass}`}
                 >
                   <div
                     className={`absolute top-0 right-0 px-3 py-1 text-xs font-black rounded-bl-xl border-b border-l uppercase ${theme.bgHeaderClass} ${theme.borderClass}`}
@@ -1385,8 +1426,8 @@ const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
 
                   {isEditMode ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
-                      <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
-                        <div className="text-xs font-bold text-slate-300">
+                      <div className="p-3 rounded-lg bg-emerald-50/50 border border-emerald-200 space-y-2">
+                        <div className="text-xs font-bold text-slate-700">
                           Tim A ({theme.name})
                         </div>
                         <select
@@ -1394,7 +1435,7 @@ const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
                           onChange={(e) =>
                             handleCourtPlayerChange(cNum, "a1", e.target.value)
                           }
-                          className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                          className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-emerald-500"
                         >
                           <option value="">-- Pilih Pemain 1 --</option>
                           {activePlayers.map((p) => (
@@ -1408,7 +1449,7 @@ const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
                           onChange={(e) =>
                             handleCourtPlayerChange(cNum, "a2", e.target.value)
                           }
-                          className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                          className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-emerald-500"
                         >
                           <option value="">-- Pilih Pemain 2 --</option>
                           {activePlayers.map((p) => (
@@ -1419,8 +1460,8 @@ const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
                         </select>
                       </div>
 
-                      <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
-                        <div className="text-xs font-bold text-slate-300">
+                      <div className="p-3 rounded-lg bg-sky-50/50 border border-sky-200 space-y-2">
+                        <div className="text-xs font-bold text-slate-700">
                           Tim B ({theme.name})
                         </div>
                         <select
@@ -1428,7 +1469,7 @@ const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
                           onChange={(e) =>
                             handleCourtPlayerChange(cNum, "b1", e.target.value)
                           }
-                          className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                          className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-sky-500"
                         >
                           <option value="">-- Pilih Pemain 1 --</option>
                           {activePlayers.map((p) => (
@@ -1442,7 +1483,7 @@ const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
                           onChange={(e) =>
                             handleCourtPlayerChange(cNum, "b2", e.target.value)
                           }
-                          className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                          className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-sky-500"
                         >
                           <option value="">-- Pilih Pemain 2 --</option>
                           {activePlayers.map((p) => (
@@ -1468,19 +1509,19 @@ const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
                       };
 
                       return (
-                        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-3 bg-slate-900/90 rounded-xl border border-slate-800/80">
+                        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-3 bg-slate-50 rounded-xl border border-slate-200">
                           <div className="flex-1 text-center sm:text-left">
-                            <div className="text-xs text-slate-400 font-semibold mb-1">
+                            <div className="text-xs text-slate-500 font-semibold mb-1">
                               TIM A (Level: {hasAdminInCourt ? "Setara 👑" : courtMatch.teamALevel})
                             </div>
-                            <div className="text-sm font-bold text-white flex items-center gap-1 sm:justify-start justify-center">
+                            <div className="text-sm font-bold text-slate-800 flex items-center gap-1 sm:justify-start justify-center">
                               {pA1?.isAdmin && <span>👑</span>}
                               <span>{pA1?.name}</span>
                               <span className={`${theme.textClass} text-xs ml-1 font-mono`}>
                                 {getPlayerLvlBadge(pA1)}
                               </span>
                             </div>
-                            <div className="text-sm font-bold text-white flex items-center gap-1 sm:justify-start justify-center">
+                            <div className="text-sm font-bold text-slate-800 flex items-center gap-1 sm:justify-start justify-center">
                               {pA2?.isAdmin && <span>👑</span>}
                               <span>{pA2?.name}</span>
                               <span className={`${theme.textClass} text-xs ml-1 font-mono`}>
@@ -1499,7 +1540,7 @@ const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
                               className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border ${
                                 hasAdminInCourt || courtMatch.levelDiff <= 2
                                   ? `${theme.bgHeaderClass} ${theme.borderClass}`
-                                  : "bg-amber-500/10 text-amber-400 border-amber-500/30"
+                                  : "bg-amber-100 text-amber-800 border-amber-300"
                               }`}
                             >
                               {hasAdminInCourt
@@ -1509,17 +1550,17 @@ const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
                           </div>
 
                           <div className="flex-1 text-center sm:text-right">
-                            <div className="text-xs text-slate-400 font-semibold mb-1">
+                            <div className="text-xs text-slate-500 font-semibold mb-1">
                               TIM B (Level: {hasAdminInCourt ? "Setara 👑" : courtMatch.teamBLevel})
                             </div>
-                            <div className="text-sm font-bold text-white flex items-center gap-1 sm:justify-end justify-center">
+                            <div className="text-sm font-bold text-slate-800 flex items-center gap-1 sm:justify-end justify-center">
                               {pB1?.isAdmin && <span>👑</span>}
                               <span>{pB1?.name}</span>
                               <span className={`${theme.textClass} text-xs ml-1 font-mono`}>
                                 {getPlayerLvlBadge(pB1)}
                               </span>
                             </div>
-                            <div className="text-sm font-bold text-white flex items-center gap-1 sm:justify-end justify-center">
+                            <div className="text-sm font-bold text-slate-800 flex items-center gap-1 sm:justify-end justify-center">
                               {pB2?.isAdmin && <span>👑</span>}
                               <span>{pB2?.name}</span>
                               <span className={`${theme.textClass} text-xs ml-1 font-mono`}>
@@ -1531,7 +1572,7 @@ const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
                       );
                     })()
                   ) : (
-                    <div className="p-4 text-center text-xs text-slate-500 italic">
+                    <div className="p-4 text-center text-xs text-slate-400 italic">
                       {activePlayers.filter((p) => !p.isAdmin).length < cNum * 4
                         ? `Pemain aktif belum mencapai ${cNum * 4} orang (${theme.name} tidak berjalan).`
                         : `${theme.name} kosong.`}
@@ -1540,7 +1581,7 @@ const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
 
                   {/* Input Shuttlecock Khusus Lapangan Ini */}
                   <div
-                    className={`mt-3 pt-3 border-t flex items-center justify-between bg-slate-900/50 p-2.5 rounded-lg ${theme.borderClass}`}
+                    className={`mt-3 pt-3 border-t flex items-center justify-between bg-slate-50 p-2.5 rounded-lg ${theme.borderClass}`}
                   >
                     <div className="flex items-center gap-2">
                       <span className="text-sm">🏸</span>
@@ -1555,7 +1596,7 @@ const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
                             Rp {(cCock * 3000).toLocaleString("id-ID")}
                           </span>
                         </div>
-                        <div className="text-[10px] text-slate-400">
+                        <div className="text-[10px] text-slate-500">
                           Dikenakan kepada pemain reguler yang bertanding di {theme.name}
                         </div>
                       </div>
@@ -1571,7 +1612,7 @@ const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
                             Math.max(0, cCock - 1)
                           )
                         }
-                        className="w-7 h-7 rounded bg-slate-800 hover:bg-slate-700 text-white font-bold flex items-center justify-center text-xs transition border border-slate-700"
+                        className="w-7 h-7 rounded bg-white hover:bg-slate-100 text-slate-700 font-bold flex items-center justify-center text-xs transition border border-slate-300 cursor-pointer"
                       >
                         -
                       </button>
@@ -1586,7 +1627,7 @@ const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
                             Math.max(0, parseInt(e.target.value) || 0)
                           )
                         }
-                        className={`w-12 bg-slate-950 border border-slate-700 rounded text-center text-xs font-black py-1 focus:outline-none ${theme.textClass}`}
+                        className={`w-12 bg-white border border-slate-300 rounded text-center text-xs font-black py-1 focus:outline-none ${theme.textClass}`}
                       />
                       <button
                         type="button"
@@ -1597,7 +1638,7 @@ const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
                             cCock + 1
                           )
                         }
-                        className={`w-7 h-7 rounded font-bold flex items-center justify-center text-xs transition ${theme.accentBg} ${theme.accentHover} ${theme.accentText}`}
+                        className={`w-7 h-7 rounded font-bold flex items-center justify-center text-xs transition cursor-pointer ${theme.accentBg} ${theme.accentHover} ${theme.accentText}`}
                       >
                         +
                       </button>
@@ -1609,10 +1650,10 @@ const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
           </div>
 
           {/* Waiting Players list */}
-          <div className="bg-slate-950/40 border border-slate-800 rounded-xl p-3">
-            <div className="text-xs font-bold text-slate-400 mb-2 flex items-center justify-between">
+          <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-xs">
+            <div className="text-xs font-bold text-slate-600 mb-2 flex items-center justify-between">
               <span>Pemain Menunggu (Bench) di Match {matchIndex}:</span>
-              <span className="text-slate-400">
+              <span className="text-slate-500">
                 {projection.waitingPlayerIds.length} orang
               </span>
             </div>
@@ -1624,12 +1665,12 @@ const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
                   return (
                     <span
                       key={pId}
-                      className="px-2 py-1 rounded-md text-xs bg-slate-800 text-slate-300 border border-slate-700 flex items-center gap-1"
+                      className="px-2 py-1 rounded-md text-xs bg-slate-100 text-slate-700 border border-slate-300 flex items-center gap-1"
                     >
                       {p?.isAdmin && <span>👑</span>}
                       <span>{p?.name}</span>
                       {!p?.isAdmin && (
-                        <span className="text-amber-400 font-mono text-[10px]">
+                        <span className="text-amber-700 font-mono text-[10px]">
                           (Tunggu {wait}x)
                         </span>
                       )}
@@ -1646,12 +1687,12 @@ const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
         </div>
 
         {/* Footer Actions */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-slate-800 bg-slate-950/60">
+        <div className="flex items-center justify-between px-6 py-4 border-t border-slate-200 bg-[#E7EEF4]/60">
           <div>
             {projection.isOverridden && (
               <button
                 onClick={handleReset}
-                className="px-3 py-1.5 rounded-lg text-xs font-semibold text-rose-400 hover:bg-rose-500/10 border border-rose-500/30 transition"
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold text-rose-700 hover:bg-rose-50 border border-rose-300 transition cursor-pointer"
               >
                 Reset ke Rekomendasi Otomatis
               </button>
@@ -1661,14 +1702,14 @@ const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
           <div className="flex items-center gap-2">
             <button
               onClick={onClose}
-              className="px-4 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:bg-slate-800 transition"
+              className="px-4 py-1.5 rounded-lg text-xs font-medium text-slate-700 bg-white border border-slate-300 hover:bg-slate-100 transition cursor-pointer"
             >
               Tutup
             </button>
             {isEditMode && (
               <button
                 onClick={handleSave}
-                className="px-4 py-1.5 rounded-lg text-xs font-bold bg-emerald-500 text-slate-950 hover:bg-emerald-400 transition shadow-lg shadow-emerald-500/20"
+                className="px-4 py-1.5 rounded-lg text-xs font-bold bg-[#357564] hover:bg-[#285B4E] text-white transition shadow-sm cursor-pointer"
               >
                 Simpan Formasi
               </button>
@@ -1695,10 +1736,14 @@ interface EditSingleCourtModalProps {
   playerMap: Map<string, Player>;
   isCourtCompleted: boolean;
   isCourtOverridden: boolean;
+  isCourtSwapped?: boolean;
+  swapType?: "horizontal" | "cross";
   onSave: (
     matchIdx: number,
     courtNum: number,
-    courtData: { teamA: [string, string]; teamB: [string, string] }
+    courtData: { teamA: [string, string]; teamB: [string, string] },
+    isSwap?: boolean,
+    swapType?: "horizontal" | "cross"
   ) => void;
   onReset: (matchIdx: number, courtNum: number) => void;
 }
@@ -1714,6 +1759,8 @@ const EditSingleCourtModal: React.FC<EditSingleCourtModalProps> = ({
   playerMap,
   isCourtCompleted,
   isCourtOverridden,
+  isCourtSwapped,
+  swapType,
   onSave,
   onReset,
 }) => {
@@ -1721,11 +1768,13 @@ const EditSingleCourtModal: React.FC<EditSingleCourtModalProps> = ({
   const [a2, setA2] = useState<string>("");
   const [b1, setB1] = useState<string>("");
   const [b2, setB2] = useState<string>("");
+  const [swapAction, setSwapAction] = useState<"horizontal" | "cross" | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   React.useEffect(() => {
     if (!isOpen || !projection) return;
     setErrorMsg(null);
+    setSwapAction(swapType || null);
     const cm =
       projection.courts?.[courtNum - 1] ||
       (courtNum === 1 ? projection.court1 : courtNum === 2 ? projection.court2 : null);
@@ -1741,7 +1790,7 @@ const EditSingleCourtModal: React.FC<EditSingleCourtModalProps> = ({
       setB1("");
       setB2("");
     }
-  }, [isOpen, projection, courtNum]);
+  }, [isOpen, projection, courtNum, swapType]);
 
   if (!isOpen || !projection) return null;
 
@@ -1758,6 +1807,24 @@ const EditSingleCourtModal: React.FC<EditSingleCourtModalProps> = ({
   const levelDiff = hasAdmin ? 0 : Math.abs(teamALevel - teamBLevel);
   const isFull = Boolean(a1 && a2 && b1 && b2);
 
+  // Handler Tukar Kanan-Kiri: Pemain 1 Tim A <-> Pemain 1 Tim B
+  const handleSwapHorizontal = () => {
+    if (!a1 || !b1) return;
+    const temp = a1;
+    setA1(b1);
+    setB1(temp);
+    setSwapAction("horizontal");
+  };
+
+  // Handler Tukar Menyilang Atas-Bawah: Pemain 1 Tim A <-> Pemain 2 Tim B
+  const handleSwapCross = () => {
+    if (!a1 || !b2) return;
+    const temp = a1;
+    setA1(b2);
+    setB2(temp);
+    setSwapAction("cross");
+  };
+
   const handleSave = () => {
     setErrorMsg(null);
     if (!a1 || !a2 || !b1 || !b2) {
@@ -1771,10 +1838,26 @@ const EditSingleCourtModal: React.FC<EditSingleCourtModalProps> = ({
       return;
     }
 
-    onSave(matchIndex, courtNum, {
-      teamA: [a1, a2],
-      teamB: [b1, b2],
-    });
+    const cm =
+      projection.courts?.[courtNum - 1] ||
+      (courtNum === 1 ? projection.court1 : courtNum === 2 ? projection.court2 : null);
+    const originalFour = cm
+      ? new Set([cm.teamA.player1Id, cm.teamA.player2Id, cm.teamB.player1Id, cm.teamB.player2Id])
+      : new Set();
+    const isSameFour = originalFour.size === 4 && [a1, a2, b1, b2].every((id) => originalFour.has(id));
+
+    const isSwap = Boolean(swapAction && isSameFour);
+
+    onSave(
+      matchIndex,
+      courtNum,
+      {
+        teamA: [a1, a2],
+        teamB: [b1, b2],
+      },
+      isSwap,
+      isSwap ? swapAction || "horizontal" : undefined
+    );
     onClose();
   };
 
@@ -1785,12 +1868,10 @@ const EditSingleCourtModal: React.FC<EditSingleCourtModalProps> = ({
 
   const getPlayerOptionLabel = (player: Player, currentSlotValue: string) => {
     let note = "";
-    // Cek apakah pemain sudah dipilih pada slot lain di lapangan ini
     const otherSelected = [a1, a2, b1, b2].filter((id) => id && id !== currentSlotValue);
     if (otherSelected.includes(player.id)) {
       note = " (sudah dipilih di lapangan ini)";
     } else {
-      // Cek apakah pemain sedang di lapangan lain pada match ini
       let playingOther = false;
       for (let c = 1; c <= courtCount; c++) {
         if (c === courtNum) continue;
@@ -1823,12 +1904,12 @@ const EditSingleCourtModal: React.FC<EditSingleCourtModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="relative w-full max-w-lg bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="relative w-full max-w-lg bg-[#F4F7FA] border border-white/80 rounded-2xl shadow-2xl overflow-hidden text-slate-800">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-950/60">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-[#E7EEF4]/90">
           <div className="flex items-center gap-3">
-            <span className="font-mono font-bold text-xs px-2.5 py-1 rounded-lg bg-emerald-400/15 border border-emerald-400/30 text-emerald-200">
+            <span className="font-mono font-bold text-xs px-2.5 py-1 rounded-lg bg-emerald-100 border border-emerald-300 text-emerald-800">
               M{matchIndex}
             </span>
             <span
@@ -1838,15 +1919,22 @@ const EditSingleCourtModal: React.FC<EditSingleCourtModalProps> = ({
               {theme.name}
             </span>
             <div>
-              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+              <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
                 Edit Lapangan {courtNum}
-                {isCourtOverridden && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-400/15 text-amber-200 border border-amber-400/30 font-semibold">
+                {isCourtSwapped ? (
+                  <span
+                    className="text-[11px] px-1.5 py-0.2 rounded bg-sky-100 text-sky-800 border border-sky-300 font-bold inline-flex items-center"
+                    title={swapType === "cross" ? "⤧" : "⇄"}
+                  >
+                    {swapType === "cross" ? "⤧" : "⇄"}
+                  </span>
+                ) : isCourtOverridden ? (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300 font-semibold">
                     Override
                   </span>
-                )}
+                ) : null}
                 {isCourtCompleted && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-400/15 text-emerald-200 border border-emerald-400/30 font-semibold">
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300 font-semibold">
                     ✓ Selesai
                   </span>
                 )}
@@ -1855,7 +1943,7 @@ const EditSingleCourtModal: React.FC<EditSingleCourtModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition"
+            className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-200/60 transition cursor-pointer"
           >
             ✕
           </button>
@@ -1864,35 +1952,68 @@ const EditSingleCourtModal: React.FC<EditSingleCourtModalProps> = ({
         {/* Body */}
         <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
           {errorMsg && (
-            <div className="p-3 bg-rose-500/10 border border-rose-500/40 rounded-xl text-xs font-semibold text-rose-300 flex items-center gap-2">
+            <div className="p-3 bg-rose-50 border border-rose-300 rounded-xl text-xs font-semibold text-rose-700 flex items-center gap-2">
               <span>⚠️</span>
               <span>{errorMsg}</span>
             </div>
           )}
 
-          <p className="text-xs text-slate-400">
-            Atur 4 pemain khusus lapangan ini. Lapangan lain dalam Match {matchIndex} tidak akan terhapus dan tetap terisi otomatis.
-          </p>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs text-slate-500">
+              Atur 4 pemain untuk lapangan ini:
+            </p>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={handleSwapHorizontal}
+                disabled={!a1 || !b1}
+                className={`w-8 h-8 rounded-lg text-base font-bold border transition flex items-center justify-center shadow-xs cursor-pointer ${
+                  swapAction === "horizontal"
+                    ? "bg-sky-100 text-sky-900 border-sky-400 ring-1 ring-sky-400"
+                    : "bg-white hover:bg-slate-100 text-slate-700 border-slate-200"
+                } disabled:opacity-30 disabled:cursor-not-allowed`}
+                title="⇄"
+              >
+                ⇄
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSwapCross}
+                disabled={!a1 || !b2}
+                className={`w-8 h-8 rounded-lg text-base font-bold border transition flex items-center justify-center shadow-xs cursor-pointer ${
+                  swapAction === "cross"
+                    ? "bg-sky-100 text-sky-900 border-sky-400 ring-1 ring-sky-400"
+                    : "bg-white hover:bg-slate-100 text-slate-700 border-slate-200"
+                } disabled:opacity-30 disabled:cursor-not-allowed`}
+                title="⤧"
+              >
+                ⤧
+              </button>
+            </div>
+          </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* Tim A */}
-            <div className="p-3.5 rounded-xl bg-slate-950/60 border border-emerald-500/30 space-y-2.5">
-              <div className="flex items-center justify-between text-xs font-bold text-emerald-300">
+            <div className="p-3.5 rounded-xl bg-white border border-emerald-300 shadow-xs space-y-2.5">
+              <div className="flex items-center justify-between text-xs font-bold text-emerald-800">
                 <span>Tim A</span>
                 {!hasAdmin && pA1 && pA2 && (
-                  <span className="font-mono text-[11px] text-slate-400">
+                  <span className="font-mono text-[11px] text-slate-500">
                     Total Lvl: {teamALevel}
                   </span>
                 )}
               </div>
               <div>
-                <label className="text-[10px] font-semibold text-slate-400 block mb-1">
+                <label className="text-[10px] font-semibold text-slate-500 block mb-1">
                   Pemain 1
                 </label>
                 <select
                   value={a1}
-                  onChange={(e) => setA1(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700 focus:border-emerald-500 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none"
+                  onChange={(e) => {
+                    setA1(e.target.value);
+                  }}
+                  className="w-full bg-slate-50 border border-slate-300 focus:border-emerald-500 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none"
                 >
                   <option value="">-- Pilih Pemain 1 --</option>
                   {activePlayers.map((p) => (
@@ -1903,13 +2024,15 @@ const EditSingleCourtModal: React.FC<EditSingleCourtModalProps> = ({
                 </select>
               </div>
               <div>
-                <label className="text-[10px] font-semibold text-slate-400 block mb-1">
+                <label className="text-[10px] font-semibold text-slate-500 block mb-1">
                   Pemain 2
                 </label>
                 <select
                   value={a2}
-                  onChange={(e) => setA2(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700 focus:border-emerald-500 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none"
+                  onChange={(e) => {
+                    setA2(e.target.value);
+                  }}
+                  className="w-full bg-slate-50 border border-slate-300 focus:border-emerald-500 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none"
                 >
                   <option value="">-- Pilih Pemain 2 --</option>
                   {activePlayers.map((p) => (
@@ -1922,23 +2045,25 @@ const EditSingleCourtModal: React.FC<EditSingleCourtModalProps> = ({
             </div>
 
             {/* Tim B */}
-            <div className="p-3.5 rounded-xl bg-slate-950/60 border border-sky-500/30 space-y-2.5">
-              <div className="flex items-center justify-between text-xs font-bold text-sky-300">
+            <div className="p-3.5 rounded-xl bg-white border border-sky-300 shadow-xs space-y-2.5">
+              <div className="flex items-center justify-between text-xs font-bold text-sky-800">
                 <span>Tim B</span>
                 {!hasAdmin && pB1 && pB2 && (
-                  <span className="font-mono text-[11px] text-slate-400">
+                  <span className="font-mono text-[11px] text-slate-500">
                     Total Lvl: {teamBLevel}
                   </span>
                 )}
               </div>
               <div>
-                <label className="text-[10px] font-semibold text-slate-400 block mb-1">
+                <label className="text-[10px] font-semibold text-slate-500 block mb-1">
                   Pemain 1
                 </label>
                 <select
                   value={b1}
-                  onChange={(e) => setB1(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700 focus:border-sky-500 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none"
+                  onChange={(e) => {
+                    setB1(e.target.value);
+                  }}
+                  className="w-full bg-slate-50 border border-slate-300 focus:border-sky-500 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none"
                 >
                   <option value="">-- Pilih Pemain 1 --</option>
                   {activePlayers.map((p) => (
@@ -1949,13 +2074,15 @@ const EditSingleCourtModal: React.FC<EditSingleCourtModalProps> = ({
                 </select>
               </div>
               <div>
-                <label className="text-[10px] font-semibold text-slate-400 block mb-1">
+                <label className="text-[10px] font-semibold text-slate-500 block mb-1">
                   Pemain 2
                 </label>
                 <select
                   value={b2}
-                  onChange={(e) => setB2(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700 focus:border-sky-500 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none"
+                  onChange={(e) => {
+                    setB2(e.target.value);
+                  }}
+                  className="w-full bg-slate-50 border border-slate-300 focus:border-sky-500 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none"
                 >
                   <option value="">-- Pilih Pemain 2 --</option>
                   {activePlayers.map((p) => (
@@ -1970,23 +2097,23 @@ const EditSingleCourtModal: React.FC<EditSingleCourtModalProps> = ({
 
           {/* Indikator Keseimbangan & Status Admin */}
           {isFull && (
-            <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800 text-xs flex items-center justify-between">
+            <div className="p-3 rounded-xl bg-white border border-slate-200 text-xs flex items-center justify-between shadow-xs">
               {hasAdmin ? (
-                <div className="flex items-center gap-1.5 text-purple-300 font-medium">
+                <div className="flex items-center gap-1.5 text-purple-700 font-medium">
                   <span>👑</span>
                   <span>Ada Admin: Pertandingan otomatis Setara (Bebas Level, Selisih 0)</span>
                 </div>
               ) : (
                 <div className="flex items-center justify-between w-full">
-                  <span className="text-slate-300">
+                  <span className="text-slate-600">
                     Keseimbangan Level:{" "}
                     <strong
                       className={
                         levelDiff <= 1
-                          ? "text-emerald-400"
+                          ? "text-emerald-700"
                           : levelDiff === 2
-                          ? "text-amber-400"
-                          : "text-rose-400"
+                          ? "text-amber-700"
+                          : "text-rose-700"
                       }
                     >
                       Selisih {levelDiff}
@@ -1995,10 +2122,10 @@ const EditSingleCourtModal: React.FC<EditSingleCourtModalProps> = ({
                   <span
                     className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
                       levelDiff <= 1
-                        ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                        ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
                         : levelDiff === 2
-                        ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
-                        : "bg-rose-500/20 text-rose-300 border border-rose-500/30"
+                        ? "bg-amber-100 text-amber-800 border border-amber-300"
+                        : "bg-rose-100 text-rose-800 border border-rose-300"
                     }`}
                   >
                     {levelDiff <= 1
@@ -2014,13 +2141,13 @@ const EditSingleCourtModal: React.FC<EditSingleCourtModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-slate-800 bg-slate-950/60">
+        <div className="flex items-center justify-between px-6 py-4 border-t border-slate-200 bg-[#E7EEF4]/60">
           <div>
-            {isCourtOverridden && (
+            {(isCourtOverridden || isCourtSwapped) && (
               <button
                 type="button"
                 onClick={handleReset}
-                className="px-3 py-1.5 rounded-lg text-xs font-semibold text-rose-300 hover:bg-rose-500/10 border border-rose-500/30 transition"
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold text-rose-700 hover:bg-rose-50 border border-rose-300 transition cursor-pointer"
               >
                 ↺ Reset ke Otomatis
               </button>
@@ -2030,14 +2157,14 @@ const EditSingleCourtModal: React.FC<EditSingleCourtModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:bg-slate-800 transition"
+              className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-slate-700 bg-white border border-slate-300 hover:bg-slate-100 transition cursor-pointer"
             >
               Batal
             </button>
             <button
               type="button"
               onClick={handleSave}
-              className="px-4 py-1.5 rounded-lg text-xs font-bold bg-emerald-500 text-slate-950 hover:bg-emerald-400 transition shadow-sm"
+              className="px-4 py-1.5 rounded-lg text-xs font-bold bg-[#357564] hover:bg-[#285B4E] text-white transition shadow-sm cursor-pointer"
             >
               Simpan Lapangan {courtNum}
             </button>
@@ -2157,26 +2284,26 @@ const MatchRefereeModalContent: React.FC<MatchRefereeModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="relative w-full max-w-lg bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl shadow-emerald-950/20 overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="relative w-full max-w-lg bg-[#F4F7FA] border border-white/80 rounded-2xl shadow-2xl overflow-hidden text-slate-800">
         {/* Header Modal */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-950/70">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-[#E7EEF4]/90">
           <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-amber-400/15 border border-amber-400/30 text-amber-300 font-black text-lg">
+            <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-amber-100 border border-amber-300 text-amber-800 font-black text-lg">
               ⚖️
             </div>
             <div>
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
                 <span>Hasil Match &amp; Wasit Selanjutnya</span>
               </h3>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-slate-500">
                 Match {matchIndex} • <span className={theme.textClass}>{theme.name}</span>
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition cursor-pointer"
+            className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-200/60 transition cursor-pointer"
           >
             ✕
           </button>
@@ -2187,13 +2314,13 @@ const MatchRefereeModalContent: React.FC<MatchRefereeModalProps> = ({
           {/* LANGKAH 1: PILIH TIM YANG KALAH */}
           <div className="space-y-2.5">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
-                <span className="w-5 h-5 rounded-full bg-slate-800 text-slate-300 flex items-center justify-center text-[10px] font-mono border border-slate-700">
+              <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                <span className="w-5 h-5 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center text-[10px] font-mono border border-slate-300">
                   1
                 </span>
                 <span>Tandai Tim yang Kalah</span>
               </label>
-              <span className="text-[11px] text-slate-400 italic">
+              <span className="text-[11px] text-slate-500 italic">
                 Klik salah satu tim di bawah
               </span>
             </div>
@@ -2203,22 +2330,22 @@ const MatchRefereeModalContent: React.FC<MatchRefereeModalProps> = ({
               <button
                 type="button"
                 onClick={() => handleSelectLosingTeam("teamA")}
-                className={`p-3.5 rounded-xl border text-left transition-all duration-200 cursor-pointer flex flex-col justify-between relative ${
+                className={`p-3.5 rounded-xl border text-left transition-all duration-200 cursor-pointer flex flex-col justify-between relative shadow-xs ${
                   selectedLosingTeam === "teamA"
-                    ? "bg-rose-950/30 border-rose-500/80 shadow-md shadow-rose-950/40 ring-1 ring-rose-500/60"
+                    ? "bg-rose-50 border-rose-400 ring-1 ring-rose-400 text-rose-900 shadow-sm"
                     : selectedLosingTeam === "teamB"
-                    ? "bg-emerald-950/20 border-emerald-500/40 opacity-90"
-                    : "bg-slate-950/60 border-slate-800 hover:border-slate-700 hover:bg-slate-900/80"
+                    ? "bg-emerald-50 border-emerald-300 opacity-90"
+                    : "bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50"
                 }`}
               >
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-emerald-300">Tim A</span>
+                  <span className="text-xs font-bold text-emerald-800">Tim A</span>
                   {selectedLosingTeam === "teamA" ? (
-                    <span className="px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-300 border border-rose-500/40 text-[10px] font-bold">
+                    <span className="px-2 py-0.5 rounded-md bg-rose-100 text-rose-700 border border-rose-300 text-[10px] font-bold">
                       ❌ Kalah
                     </span>
                   ) : selectedLosingTeam === "teamB" ? (
-                    <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold">
+                    <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-bold">
                       🏆 Menang
                     </span>
                   ) : (
@@ -2227,17 +2354,17 @@ const MatchRefereeModalContent: React.FC<MatchRefereeModalProps> = ({
                 </div>
 
                 <div className="space-y-1 text-xs">
-                  <div className="font-semibold text-slate-200 truncate flex items-center gap-1">
+                  <div className="font-semibold text-slate-800 truncate flex items-center gap-1">
                     {pA1?.isAdmin && <span>👑</span>}
                     <span>{pA1?.name || "-"}</span>
-                    <span className="text-slate-400 font-mono text-[10px]">
+                    <span className="text-slate-500 font-mono text-[10px]">
                       (L{pA1?.level ?? "-"})
                     </span>
                   </div>
-                  <div className="font-semibold text-slate-200 truncate flex items-center gap-1">
+                  <div className="font-semibold text-slate-800 truncate flex items-center gap-1">
                     {pA2?.isAdmin && <span>👑</span>}
                     <span>{pA2?.name || "-"}</span>
-                    <span className="text-slate-400 font-mono text-[10px]">
+                    <span className="text-slate-500 font-mono text-[10px]">
                       (L{pA2?.level ?? "-"})
                     </span>
                   </div>
@@ -2248,22 +2375,22 @@ const MatchRefereeModalContent: React.FC<MatchRefereeModalProps> = ({
               <button
                 type="button"
                 onClick={() => handleSelectLosingTeam("teamB")}
-                className={`p-3.5 rounded-xl border text-left transition-all duration-200 cursor-pointer flex flex-col justify-between relative ${
+                className={`p-3.5 rounded-xl border text-left transition-all duration-200 cursor-pointer flex flex-col justify-between relative shadow-xs ${
                   selectedLosingTeam === "teamB"
-                    ? "bg-rose-950/30 border-rose-500/80 shadow-md shadow-rose-950/40 ring-1 ring-rose-500/60"
+                    ? "bg-rose-50 border-rose-400 ring-1 ring-rose-400 text-rose-900 shadow-sm"
                     : selectedLosingTeam === "teamA"
-                    ? "bg-emerald-950/20 border-emerald-500/40 opacity-90"
-                    : "bg-slate-950/60 border-slate-800 hover:border-slate-700 hover:bg-slate-900/80"
+                    ? "bg-emerald-50 border-emerald-300 opacity-90"
+                    : "bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50"
                 }`}
               >
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-sky-300">Tim B</span>
+                  <span className="text-xs font-bold text-sky-800">Tim B</span>
                   {selectedLosingTeam === "teamB" ? (
-                    <span className="px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-300 border border-rose-500/40 text-[10px] font-bold">
+                    <span className="px-2 py-0.5 rounded-md bg-rose-100 text-rose-700 border border-rose-300 text-[10px] font-bold">
                       ❌ Kalah
                     </span>
                   ) : selectedLosingTeam === "teamA" ? (
-                    <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold">
+                    <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-bold">
                       🏆 Menang
                     </span>
                   ) : (
@@ -2272,17 +2399,17 @@ const MatchRefereeModalContent: React.FC<MatchRefereeModalProps> = ({
                 </div>
 
                 <div className="space-y-1 text-xs">
-                  <div className="font-semibold text-slate-200 truncate flex items-center gap-1">
+                  <div className="font-semibold text-slate-800 truncate flex items-center gap-1">
                     {pB1?.isAdmin && <span>👑</span>}
                     <span>{pB1?.name || "-"}</span>
-                    <span className="text-slate-400 font-mono text-[10px]">
+                    <span className="text-slate-500 font-mono text-[10px]">
                       (L{pB1?.level ?? "-"})
                     </span>
                   </div>
-                  <div className="font-semibold text-slate-200 truncate flex items-center gap-1">
+                  <div className="font-semibold text-slate-800 truncate flex items-center gap-1">
                     {pB2?.isAdmin && <span>👑</span>}
                     <span>{pB2?.name || "-"}</span>
-                    <span className="text-slate-400 font-mono text-[10px]">
+                    <span className="text-slate-500 font-mono text-[10px]">
                       (L{pB2?.level ?? "-"})
                     </span>
                   </div>
@@ -2293,20 +2420,20 @@ const MatchRefereeModalContent: React.FC<MatchRefereeModalProps> = ({
 
           {/* LANGKAH 2: PILIH WASIT DARI ORANG YANG KALAH ATAU ADMIN */}
           {selectedLosingTeam && refereeCandidateOptions.length > 0 && (
-            <div className="space-y-2.5 pt-2 border-t border-slate-800/80 animate-in fade-in duration-200">
+            <div className="space-y-2.5 pt-2 border-t border-slate-200 animate-in fade-in duration-200">
               <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
-                  <span className="w-5 h-5 rounded-full bg-amber-400/20 text-amber-300 flex items-center justify-center text-[10px] font-mono border border-amber-400/40">
+                <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                  <span className="w-5 h-5 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center text-[10px] font-mono border border-amber-300">
                     2
                   </span>
                   <span>Pilih Wasit untuk Match {matchIndex + 1}</span>
                 </label>
-                <span className="text-[11px] text-amber-300/80">
+                <span className="text-[11px] text-amber-700 font-medium">
                   {refereeCandidateOptions.length} Opsi Tersedia
                 </span>
               </div>
 
-              <p className="text-[11px] text-slate-400 leading-relaxed">
+              <p className="text-[11px] text-slate-500 leading-relaxed">
                 Tunjuk salah satu orang dari tim yang kalah atau Admin (Host) untuk bertugas sebagai wasit di pertandingan selanjutnya.
               </p>
 
@@ -2325,43 +2452,43 @@ const MatchRefereeModalContent: React.FC<MatchRefereeModalProps> = ({
                       key={player.id}
                       type="button"
                       onClick={() => setSelectedRefereeId(player.id)}
-                      className={`w-full p-3 rounded-xl border text-left transition-all duration-150 cursor-pointer flex items-center justify-between gap-3 ${
+                      className={`w-full p-3 rounded-xl border text-left transition-all duration-150 cursor-pointer flex items-center justify-between gap-3 shadow-xs ${
                         isSelected
-                          ? "bg-amber-400/15 border-amber-400/60 ring-1 ring-amber-400/40 shadow-sm shadow-amber-950/30"
+                          ? "bg-amber-50 border-amber-400 ring-1 ring-amber-400 text-amber-900 shadow-sm"
                           : player.isAdmin
-                          ? "bg-purple-950/20 border-purple-800/50 hover:border-purple-600/60 hover:bg-purple-900/30"
-                          : "bg-slate-950/60 border-slate-800 hover:border-slate-700 hover:bg-slate-900"
+                          ? "bg-purple-50/70 border-purple-200 hover:border-purple-300 hover:bg-purple-100/50"
+                          : "bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50"
                       }`}
                     >
                       <div className="flex items-center gap-3">
                         <div
                           className={`w-4 h-4 rounded-full border flex items-center justify-center transition ${
                             isSelected
-                              ? "border-amber-400 bg-amber-400"
-                              : "border-slate-600 bg-slate-900"
+                              ? "border-amber-500 bg-amber-500"
+                              : "border-slate-300 bg-white"
                           }`}
                         >
                           {isSelected && (
-                            <span className="w-1.5 h-1.5 rounded-full bg-slate-950"></span>
+                            <span className="w-1.5 h-1.5 rounded-full bg-white"></span>
                           )}
                         </div>
                         <div>
-                          <div className="font-bold text-xs text-white flex items-center gap-1.5">
+                          <div className="font-bold text-xs text-slate-800 flex items-center gap-1.5">
                             {player.isAdmin && <span>👑</span>}
                             <span>{player.name}</span>
-                            <span className="text-slate-400 font-mono text-[10px]">
+                            <span className="text-slate-500 font-mono text-[10px]">
                               {player.isAdmin ? "[Host]" : `[Lvl ${player.level ?? 1}]`}
                             </span>
                             {player.isAdmin && (
-                              <span className="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[9px] font-bold">
+                              <span className="px-1.5 py-0.5 rounded bg-purple-100 text-purple-800 border border-purple-200 text-[9px] font-bold">
                                 Opsi Admin
                               </span>
                             )}
                           </div>
-                          <div className="text-[11px] text-slate-400 flex items-center gap-2 mt-0.5">
+                          <div className="text-[11px] text-slate-500 flex items-center gap-2 mt-0.5">
                             <span>
                               Riwayat wasit:{" "}
-                              <strong className="text-amber-300 font-bold">
+                              <strong className="text-amber-700 font-bold">
                                 {wasitCount}x
                               </strong>
                             </span>
@@ -2370,12 +2497,12 @@ const MatchRefereeModalContent: React.FC<MatchRefereeModalProps> = ({
                       </div>
 
                       {isRecommended && (
-                        <span className="px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-[10px] font-semibold shrink-0">
+                        <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-semibold shrink-0">
                           ⭐ Rekomendasi (Paling Jarang)
                         </span>
                       )}
                       {player.isAdmin && (
-                        <span className="px-2 py-0.5 rounded-md bg-purple-500/15 text-purple-300 border border-purple-500/30 text-[10px] font-semibold shrink-0">
+                        <span className="px-2 py-0.5 rounded-md bg-purple-100 text-purple-800 border border-purple-200 text-[10px] font-semibold shrink-0">
                           👑 Admin (Host)
                         </span>
                       )}
@@ -2387,33 +2514,33 @@ const MatchRefereeModalContent: React.FC<MatchRefereeModalProps> = ({
           )}
 
           {/* OPSI AUTO-SELESAI */}
-          <div className="pt-2 border-t border-slate-800/80">
-            <label className="flex items-center gap-2.5 p-2.5 rounded-xl bg-slate-950/50 border border-slate-800 text-xs text-slate-300 cursor-pointer select-none hover:border-slate-700 transition">
+          <div className="pt-2 border-t border-slate-200">
+            <label className="flex items-center gap-2.5 p-2.5 rounded-xl bg-white border border-slate-200 text-xs text-slate-700 cursor-pointer select-none hover:border-slate-300 transition shadow-xs">
               <input
                 type="checkbox"
                 checked={markCompleted}
                 onChange={(e) => setMarkCompleted(e.target.checked)}
-                className="w-4 h-4 rounded border-slate-700 text-emerald-500 focus:ring-emerald-500 accent-emerald-500 cursor-pointer"
+                className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 accent-emerald-600 cursor-pointer"
               />
               <span>Tandai pertandingan Match {matchIndex} Lapangan {courtNum} sebagai Selesai</span>
             </label>
           </div>
 
-          {/* TABEL DATA REKAP FREKUENSI WASIT PESERTA (READ-ONLY, TANPA INNER SCROLL) */}
-          <div className="pt-3 border-t border-slate-800/80 space-y-2">
+          {/* TABEL DATA REKAP FREKUENSI WASIT PESERTA (READ-ONLY) */}
+          <div className="pt-3 border-t border-slate-200 space-y-2">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+              <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
                 <span>📋</span>
                 <span>Data Peserta &amp; Frekuensi Wasit</span>
               </label>
-              <span className="text-[10px] text-slate-400 font-medium">
+              <span className="text-[10px] text-slate-500 font-medium">
                 (Peserta Hadir • {participantsList.length} Pemain)
               </span>
             </div>
 
-            <div className="rounded-xl border border-slate-800 bg-slate-950/60 overflow-hidden shadow-inner">
+            <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-xs">
               <table className="w-full text-left text-xs">
-                <thead className="bg-slate-900/90 text-[10px] uppercase font-bold text-slate-400 border-b border-slate-800">
+                <thead className="bg-[#E7EEF4] text-[10px] uppercase font-bold text-slate-600 border-b border-slate-200">
                   <tr>
                     <th className="py-2 px-3 w-10 text-center">No</th>
                     <th className="py-2 px-3">Nama Peserta</th>
@@ -2421,7 +2548,7 @@ const MatchRefereeModalContent: React.FC<MatchRefereeModalProps> = ({
                     <th className="py-2 px-3 text-right">Sudah Jadi Wasit</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/40">
+                <tbody className="divide-y divide-slate-100">
                   {participantsList.map((player, idx) => {
                     const count = refereeStats[player.id] || 0;
                     const isLosingTeamMember = losingPlayers.some((p) => p.id === player.id);
@@ -2433,54 +2560,54 @@ const MatchRefereeModalContent: React.FC<MatchRefereeModalProps> = ({
                         key={player.id}
                         className={`transition-colors ${
                           isAbsent
-                            ? "opacity-40 text-slate-500 bg-slate-950/40"
+                            ? "opacity-40 text-slate-400 bg-slate-50"
                             : isSelectedWasit
-                            ? "bg-amber-400/10 text-amber-200"
+                            ? "bg-amber-50 text-amber-900"
                             : isLosingTeamMember
-                            ? "bg-slate-900/40 hover:bg-slate-800/40"
-                            : "hover:bg-slate-900/30"
+                            ? "bg-rose-50/40 hover:bg-rose-50/70"
+                            : "hover:bg-slate-50"
                         }`}
                       >
                         <td className="py-1.5 px-3 text-center text-slate-500 font-mono text-[11px]">
                           {idx + 1}
                         </td>
-                        <td className="py-1.5 px-3 font-semibold text-slate-200">
+                        <td className="py-1.5 px-3 font-semibold text-slate-800">
                           <div className="flex items-center gap-1.5">
                             {player.isAdmin && <span>👑</span>}
-                            <span className={player.isAdmin ? "text-purple-300" : isAbsent ? "text-slate-500 line-through" : ""}>
+                            <span className={player.isAdmin ? "text-purple-700" : isAbsent ? "text-slate-400 line-through" : ""}>
                               {player.name}
                             </span>
                             {player.isAdmin && (
-                              <span className="text-[9px] px-1 py-0.2 rounded bg-purple-500/20 text-purple-300 font-normal">
+                              <span className="text-[9px] px-1 py-0.2 rounded bg-purple-100 text-purple-800 font-normal border border-purple-200">
                                 Host
                               </span>
                             )}
                             {isLosingTeamMember && (
-                              <span className="text-[9px] px-1 py-0.2 rounded bg-rose-500/15 text-rose-300 font-normal">
+                              <span className="text-[9px] px-1 py-0.2 rounded bg-rose-100 text-rose-700 font-normal border border-rose-200">
                                 Kalah M{matchIndex}
                               </span>
                             )}
                             {isSelectedWasit && (
-                              <span className="text-[9px] px-1 py-0.2 rounded bg-amber-400/20 text-amber-300 font-bold">
+                              <span className="text-[9px] px-1 py-0.2 rounded bg-amber-100 text-amber-800 font-bold border border-amber-300">
                                 Dipilih Wasit
                               </span>
                             )}
                             {isAbsent && (
-                              <span className="text-[9px] px-1 py-0.2 rounded bg-slate-800 text-slate-500 font-normal">
+                              <span className="text-[9px] px-1 py-0.2 rounded bg-slate-100 text-slate-500 font-normal">
                                 Tidak Hadir
                               </span>
                             )}
                           </div>
                         </td>
-                        <td className="py-1.5 px-2 text-center text-slate-400 text-[11px] font-mono">
+                        <td className="py-1.5 px-2 text-center text-slate-500 text-[11px] font-mono">
                           {player.isAdmin ? "-" : `L${player.level ?? 1}`}
                         </td>
                         <td className="py-1.5 px-3 text-right">
                           <span
                             className={`inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[11px] font-mono font-bold ${
                               count > 0
-                                ? "bg-amber-400/15 text-amber-300 border border-amber-400/30"
-                                : "text-slate-500"
+                                ? "bg-amber-100 text-amber-800 border border-amber-300"
+                                : "text-slate-400"
                             }`}
                           >
                             <span>{count}x</span>
@@ -2497,13 +2624,13 @@ const MatchRefereeModalContent: React.FC<MatchRefereeModalProps> = ({
         </div>
 
         {/* Footer Modal */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-slate-800 bg-slate-950/70">
+        <div className="flex items-center justify-between px-6 py-4 border-t border-slate-200 bg-[#E7EEF4]/60">
           <div>
             {currentResult && (
               <button
                 type="button"
                 onClick={handleReset}
-                className="px-3 py-1.5 rounded-lg text-xs font-semibold text-rose-300 hover:bg-rose-500/10 border border-rose-500/30 transition cursor-pointer"
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold text-rose-700 hover:bg-rose-50 border border-rose-300 transition cursor-pointer"
               >
                 ↺ Hapus / Reset Hasil
               </button>
@@ -2513,7 +2640,7 @@ const MatchRefereeModalContent: React.FC<MatchRefereeModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:bg-slate-800 transition cursor-pointer"
+              className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-slate-700 bg-white border border-slate-300 hover:bg-slate-100 transition cursor-pointer"
             >
               Batal
             </button>
@@ -2521,7 +2648,7 @@ const MatchRefereeModalContent: React.FC<MatchRefereeModalProps> = ({
               type="button"
               onClick={handleSave}
               disabled={!selectedLosingTeam || !selectedRefereeId}
-              className="px-4 py-1.5 rounded-lg text-xs font-bold bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 transition shadow-sm cursor-pointer"
+              className="px-4 py-1.5 rounded-lg text-xs font-bold bg-[#357564] hover:bg-[#285B4E] disabled:opacity-40 disabled:cursor-not-allowed text-white transition shadow-sm cursor-pointer"
             >
               Simpan Hasil &amp; Wasit
             </button>
@@ -2588,115 +2715,118 @@ const EditFeeModal: React.FC<EditFeeModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="relative w-full max-w-md bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl p-6 space-y-5">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="relative w-full max-w-md bg-[#F4F7FA] border border-white/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+        {/* Header Modal */}
+        <div className="px-6 py-4 border-b border-slate-200/80 bg-[#E7EEF4]/60 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <span className="text-2xl">💰</span>
             <div>
-              <h3 className="text-base font-bold text-white">
-                Penyesuaian Biaya / Diskon
+              <h3 className="text-base font-bold text-slate-800">
+                Penyesuaian Biaya
               </h3>
-              <p className="text-xs text-slate-400">
-                Pemain: <strong className="text-emerald-400">{player.name}</strong>
+              <p className="text-xs text-slate-500">
+                Pemain: <strong className="text-[#285B4E]">{player.name}</strong>
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 transition cursor-pointer"
           >
             ✕
           </button>
         </div>
 
-        {/* Info Biaya Otomatis */}
-        <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-3.5 space-y-1 text-xs">
-          <div className="text-slate-400 font-medium flex justify-between">
-            <span>
-              {player.isAdmin ? "Status Khusus:" : "Hitungan Otomatis (11k + 3k×cock):"}
-            </span>
-            <span className="font-mono text-white font-bold">
-              {player.isAdmin ? "Bebas Iuran (Admin)" : `Rp ${autoFee.toLocaleString("id-ID")}`}
-            </span>
-          </div>
-          {!player.isAdmin && (
-            <div className="text-slate-500 text-[11px]">
-              Cock lapangan dimainkan: {shuttlecockCount} 🏸
+        <div className="p-6 space-y-4">
+          {/* Info Biaya Otomatis */}
+          <div className="bg-white/90 border border-slate-200/80 rounded-xl p-3.5 space-y-1 text-xs shadow-xs">
+            <div className="text-slate-600 font-medium flex justify-between">
+              <span>
+                {player.isAdmin ? "Status Khusus:" : "Hitungan Otomatis (11k + 3k×cock):"}
+              </span>
+              <span className="font-mono text-slate-800 font-bold">
+                {player.isAdmin ? "Bebas Iuran (Admin)" : `Rp ${autoFee.toLocaleString("id-ID")}`}
+              </span>
             </div>
-          )}
-        </div>
-
-        {/* Input Custom Fee */}
-        <div>
-          <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-            Nominal Tagihan yang Harus Dibayar (Rp):
-          </label>
-          <div className="relative">
-            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-mono font-bold text-xs">
-              Rp
-            </span>
-            <input
-              type="number"
-              min={0}
-              step={1000}
-              value={feeInput}
-              onChange={(e) =>
-                setFeeInput(Math.max(0, parseInt(e.target.value) || 0))
-              }
-              className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-10 pr-3 py-2 text-sm font-mono font-bold text-emerald-400 focus:outline-none focus:border-emerald-500"
-            />
+            {!player.isAdmin && (
+              <div className="text-slate-500 text-[11px]">
+                Cock lapangan dimainkan: {shuttlecockCount} 🏸
+              </div>
+            )}
           </div>
-          <p className="text-[11px] text-slate-400 mt-1">
-            Gunakan untuk memberikan diskon, pembulatan, atau potongan khusus.
-          </p>
-        </div>
 
-        {/* Quick Discount Buttons */}
-        <div>
-          <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">
-            Pilihan Cepat Diskon:
+          {/* Input Custom Fee */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+              Nominal Tagihan yang Harus Dibayar (Rp):
+            </label>
+            <div className="relative">
+              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-mono font-bold text-xs">
+                Rp
+              </span>
+              <input
+                type="number"
+                min={0}
+                step={1000}
+                value={feeInput}
+                onChange={(e) =>
+                  setFeeInput(Math.max(0, parseInt(e.target.value) || 0))
+                }
+                className="w-full bg-white border border-slate-300 rounded-xl pl-10 pr-3 py-2 text-sm font-mono font-bold text-slate-900 focus:outline-none focus:border-[#357564] focus:ring-1 focus:ring-[#357564]"
+              />
+            </div>
+            <p className="text-[11px] text-slate-500 mt-1">
+              Gunakan untuk memberikan penyesuaian nominal, pembulatan, atau potongan khusus.
+            </p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setFeeInput(Math.max(0, autoFee - 5000))}
-              className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700 transition"
-            >
-              -Rp 5.000
-            </button>
-            <button
-              type="button"
-              onClick={() => setFeeInput(Math.max(0, autoFee - 10000))}
-              className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700 transition"
-            >
-              -Rp 10.000
-            </button>
-            <button
-              type="button"
-              onClick={() => setFeeInput(10000)}
-              className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700 transition"
-            >
-              Pas Rp 10.000
-            </button>
-            <button
-              type="button"
-              onClick={() => setFeeInput(0)}
-              className="px-2.5 py-1 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 text-xs font-medium border border-rose-800/60 transition"
-            >
-              Gratis (Rp 0)
-            </button>
+
+          {/* Quick Discount Buttons */}
+          <div>
+            <div className="text-[11px] font-semibold text-slate-600 uppercase tracking-wider mb-2">
+              Pilihan Cepat:
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setFeeInput(Math.max(0, autoFee - 5000))}
+                className="px-2.5 py-1.5 rounded-lg bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium border border-slate-200 shadow-xs transition cursor-pointer"
+              >
+                -Rp 5.000
+              </button>
+              <button
+                type="button"
+                onClick={() => setFeeInput(Math.max(0, autoFee - 10000))}
+                className="px-2.5 py-1.5 rounded-lg bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium border border-slate-200 shadow-xs transition cursor-pointer"
+              >
+                -Rp 10.000
+              </button>
+              <button
+                type="button"
+                onClick={() => setFeeInput(10000)}
+                className="px-2.5 py-1.5 rounded-lg bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium border border-slate-200 shadow-xs transition cursor-pointer"
+              >
+                Pas Rp 10.000
+              </button>
+              <button
+                type="button"
+                onClick={() => setFeeInput(0)}
+                className="px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-medium border border-rose-200 transition cursor-pointer"
+              >
+                Gratis (Rp 0)
+              </button>
+            </div>
           </div>
         </div>
 
         {/* Actions */}
-        <div className="flex items-center justify-between pt-3 border-t border-slate-800">
+        <div className="flex items-center justify-between px-6 py-4 border-t border-slate-200/80 bg-[#E7EEF4]/60">
           <div>
             {isCustom && (
               <button
                 type="button"
                 onClick={handleReset}
-                className="text-xs text-rose-400 hover:text-rose-300 transition"
+                className="text-xs font-semibold text-rose-600 hover:text-rose-700 hover:underline transition cursor-pointer"
               >
                 ↺ Reset ke Otomatis
               </button>
@@ -2706,14 +2836,14 @@ const EditFeeModal: React.FC<EditFeeModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-3 py-1.5 rounded-xl text-xs font-medium text-slate-400 hover:text-white transition"
+              className="px-3.5 py-1.5 rounded-xl text-xs font-medium text-slate-700 bg-white border border-slate-300 hover:bg-slate-100 transition cursor-pointer"
             >
               Batal
             </button>
             <button
               type="button"
               onClick={handleSave}
-              className="px-4 py-1.5 rounded-xl text-xs font-bold bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition shadow-md shadow-emerald-500/20"
+              className="px-4 py-1.5 rounded-xl text-xs font-bold bg-[#357564] hover:bg-[#285B4E] text-white transition shadow-sm cursor-pointer"
             >
               Simpan Biaya
             </button>
@@ -2740,6 +2870,7 @@ interface FinanceModalProps {
   setShuttlecockPrice: (val: number) => void;
   totalSessionShuttlecocks: number;
   presentPlayers: Player[];
+  earlyDepartedPlayers?: Player[];
   paymentStatuses: Record<string, "QRIS" | "Cash" | "">;
   playerStatsMap: Map<
     string,
@@ -2770,6 +2901,7 @@ const FinanceModal: React.FC<FinanceModalProps> = ({
   setShuttlecockPrice,
   totalSessionShuttlecocks,
   presentPlayers,
+  earlyDepartedPlayers = [],
   paymentStatuses,
   playerStatsMap,
   onUpdatePaymentStatus,
@@ -2789,284 +2921,308 @@ const FinanceModal: React.FC<FinanceModalProps> = ({
   const isSurplus = keuntunganBersih >= 0;
   const isProyeksiSurplus = proyeksiKeuntunganBersih >= 0;
 
+  // Gabungkan pemain yang hadir dan pemain yang pulang duluan agar semua yang berkewajiban membayar tercatat
+  const allBilledPlayers = useMemo(() => {
+    const list = [...presentPlayers];
+    if (earlyDepartedPlayers && earlyDepartedPlayers.length > 0) {
+      for (const ep of earlyDepartedPlayers) {
+        if (!list.some((p) => p.id === ep.id)) {
+          list.push(ep);
+        }
+      }
+    }
+    return list;
+  }, [presentPlayers, earlyDepartedPlayers]);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="relative w-full max-w-2xl bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl p-5 sm:p-6 space-y-5 max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="relative w-full max-w-2xl bg-[#F4F7FA] border border-white/80 rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
         {/* Header Modal */}
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3.5">
+        <div className="px-6 py-4 border-b border-slate-200/80 bg-[#E7EEF4]/60 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2.5">
             <span className="text-2xl">💰</span>
             <div>
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
                 <span>Laporan Keuangan &amp; Keuntungan Bersih</span>
               </h3>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-slate-500">
                 Perhitungan pemasukan pemain terbayar, biaya sewa lapangan &amp; kok.
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 transition cursor-pointer"
           >
             ✕
           </button>
         </div>
 
-        {/* 3 Kartu Ringkasan: Pemasukan, Pengeluaran, Keuntungan Bersih */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {/* Kartu 1: Pemasukan */}
-          <div className="bg-slate-950/70 border border-emerald-400/20 rounded-xl p-3.5 flex flex-col justify-between">
-            <div>
-              <div className="text-[11px] font-semibold text-emerald-300 uppercase tracking-wider flex items-center gap-1">
-                <span>📥 Pemasukan</span>
-              </div>
-              <div className="text-lg font-bold text-emerald-300 mt-1">
-                Rp {totalPemasukanTerbayar.toLocaleString("id-ID")}
-              </div>
-            </div>
-            <div className="mt-2.5 pt-2 border-t border-slate-800/80 text-[11px] text-slate-400 space-y-0.5">
+        {/* Scrollable Modal Body */}
+        <div className="p-5 sm:p-6 space-y-5 overflow-y-auto">
+          {/* 3 Kartu Ringkasan: Pemasukan, Pengeluaran, Keuntungan Bersih */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {/* Kartu 1: Pemasukan */}
+            <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-xl p-3.5 flex flex-col justify-between shadow-xs">
               <div>
-                <strong className="text-slate-200 font-semibold">{totalPaidCount}</strong> dari {regularPresent} pemain terbayar
+                <div className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider flex items-center gap-1">
+                  <span>📥 Pemasukan</span>
+                </div>
+                <div className="text-xl font-bold text-emerald-700 mt-1 font-mono">
+                  Rp {totalPemasukanTerbayar.toLocaleString("id-ID")}
+                </div>
               </div>
-              <div className="text-[10px] text-slate-400">
-                (📱 {qrisPaidCount} QRIS · 💵 {cashPaidCount} Cash)
-              </div>
-              <div className="text-[10px] text-slate-400 pt-0.5">
-                Potensi total: Rp {totalKas.toLocaleString("id-ID")}
+              <div className="mt-2.5 pt-2 border-t border-emerald-200/60 text-[11px] text-emerald-900/80 space-y-0.5">
+                <div>
+                  <strong className="text-emerald-950 font-semibold">{totalPaidCount}</strong> dari {regularPresent} pemain terbayar
+                </div>
+                <div className="text-[10px] text-emerald-800">
+                  (📱 {qrisPaidCount} QRIS · 💵 {cashPaidCount} Cash)
+                </div>
+                <div className="text-[10px] text-emerald-800 pt-0.5">
+                  Potensi total: Rp {totalKas.toLocaleString("id-ID")}
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Kartu 2: Pengeluaran */}
-          <div className="bg-slate-950/70 border border-rose-400/20 rounded-xl p-3.5 flex flex-col justify-between">
-            <div>
-              <div className="text-[11px] font-semibold text-rose-300 uppercase tracking-wider flex items-center gap-1">
-                <span>📤 Pengeluaran</span>
-              </div>
-              <div className="text-lg font-bold text-rose-300 mt-1">
-                Rp {totalPengeluaran.toLocaleString("id-ID")}
-              </div>
-            </div>
-            <div className="mt-2.5 pt-2 border-t border-slate-800/80 text-[11px] text-slate-400 space-y-0.5">
+            {/* Kartu 2: Pengeluaran */}
+            <div className="bg-rose-50/70 border border-rose-200/80 rounded-xl p-3.5 flex flex-col justify-between shadow-xs">
               <div>
-                Lapangan: <strong className="text-slate-200">Rp {totalPengeluaranLapangan.toLocaleString("id-ID")}</strong>
+                <div className="text-[11px] font-bold text-rose-800 uppercase tracking-wider flex items-center gap-1">
+                  <span>📤 Pengeluaran</span>
+                </div>
+                <div className="text-xl font-bold text-rose-700 mt-1 font-mono">
+                  Rp {totalPengeluaran.toLocaleString("id-ID")}
+                </div>
               </div>
-              <div>
-                Shuttlecock: <strong className="text-slate-200">Rp {totalPengeluaranShuttlecock.toLocaleString("id-ID")}</strong>
-              </div>
-              <div className="text-[10px] text-slate-400 pt-0.5">
-                ({courtCount} Lapangan · {totalSessionShuttlecocks} Kok)
+              <div className="mt-2.5 pt-2 border-t border-rose-200/60 text-[11px] text-rose-900/80 space-y-0.5">
+                <div>
+                  Lapangan: <strong className="text-rose-950">Rp {totalPengeluaranLapangan.toLocaleString("id-ID")}</strong>
+                </div>
+                <div>
+                  Shuttlecock: <strong className="text-rose-950">Rp {totalPengeluaranShuttlecock.toLocaleString("id-ID")}</strong>
+                </div>
+                <div className="text-[10px] text-rose-800 pt-0.5">
+                  ({courtCount} Lapangan · {totalSessionShuttlecocks} Kok)
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Kartu 3: Keuntungan Bersih */}
-          <div
-            className={`border rounded-xl p-3.5 flex flex-col justify-between ${
-              isSurplus
-                ? "bg-emerald-950/20 border-emerald-400/30"
-                : "bg-rose-950/20 border-rose-400/30"
-            }`}
-          >
-            <div>
-              <div
-                className={`text-[11px] font-semibold uppercase tracking-wider flex items-center gap-1 ${
-                  isSurplus ? "text-emerald-300" : "text-rose-300"
-                }`}
-              >
-                <span>{isSurplus ? "⚖️ Keuntungan Bersih" : "⚠️ Defisit Kas"}</span>
-              </div>
-              <div
-                className={`text-lg font-bold mt-1 ${
-                  isSurplus ? "text-emerald-300" : "text-rose-300"
-                }`}
-              >
-                {isSurplus ? "+" : ""}Rp {keuntunganBersih.toLocaleString("id-ID")}
-              </div>
-            </div>
-            <div className="mt-2.5 pt-2 border-t border-slate-800/80 text-[11px] text-slate-400 space-y-0.5">
-              <div className="text-[10px]">
-                {isSurplus ? "✓ Kas saat ini surplus" : "⚠️ Kas masih minus"}
-              </div>
-              <div className="text-[10px] pt-0.5">
-                Proyeksi jika semua bayar:{" "}
-                <strong className={isProyeksiSurplus ? "text-emerald-300" : "text-rose-300"}>
-                  {isProyeksiSurplus ? "+" : ""}Rp {proyeksiKeuntunganBersih.toLocaleString("id-ID")}
-                </strong>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Setting Harga Manual (Harga Lapangan & Shuttlecock) */}
-        <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-4 space-y-3">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">
-              ⚙️ Pengaturan Harga Pengeluaran (Dapat Diubah)
-            </h4>
-            <button
-              type="button"
-              onClick={() => {
-                setCourtPrice(62500);
-                setShuttlecockPrice(8500);
-              }}
-              className="text-[11px] text-amber-300 hover:text-amber-200 transition font-medium"
+            {/* Kartu 3: Keuntungan Bersih */}
+            <div
+              className={`rounded-xl p-3.5 flex flex-col justify-between shadow-xs border ${
+                isSurplus
+                  ? "bg-emerald-100/60 border-emerald-300"
+                  : "bg-rose-100/60 border-rose-300"
+              }`}
             >
-              ↺ Reset Default (62.5k / 8.5k)
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-            {/* Input Harga Lapangan */}
-            <div className="bg-slate-900/80 border border-slate-700/60 rounded-lg p-3">
-              <label className="block text-xs font-medium text-slate-300 mb-1">
-                Harga Sewa per Lapangan (Rp)
-              </label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  min={0}
-                  step={500}
-                  value={courtPrice}
-                  onChange={(e) => setCourtPrice(Math.max(0, parseInt(e.target.value) || 0))}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-md px-2.5 py-1.5 text-xs font-mono font-bold text-white focus:outline-none focus:border-emerald-400"
-                />
+              <div>
+                <div
+                  className={`text-[11px] font-bold uppercase tracking-wider flex items-center gap-1 ${
+                    isSurplus ? "text-emerald-900" : "text-rose-900"
+                  }`}
+                >
+                  <span>{isSurplus ? "⚖️ Keuntungan Bersih" : "⚠️ Defisit Kas"}</span>
+                </div>
+                <div
+                  className={`text-xl font-bold mt-1 font-mono ${
+                    isSurplus ? "text-emerald-800" : "text-rose-800"
+                  }`}
+                >
+                  {isSurplus ? "+" : ""}Rp {keuntunganBersih.toLocaleString("id-ID")}
+                </div>
               </div>
-              <span className="block text-[11px] text-slate-400 mt-1">
-                Subtotal ({courtCount} lapangan):{" "}
-                <strong className="text-slate-200">
-                  Rp {totalPengeluaranLapangan.toLocaleString("id-ID")}
-                </strong>
-              </span>
-            </div>
-
-            {/* Input Harga Shuttlecock */}
-            <div className="bg-slate-900/80 border border-slate-700/60 rounded-lg p-3">
-              <label className="block text-xs font-medium text-slate-300 mb-1">
-                Harga per Shuttlecock (Rp)
-              </label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  min={0}
-                  step={100}
-                  value={shuttlecockPrice}
-                  onChange={(e) => setShuttlecockPrice(Math.max(0, parseInt(e.target.value) || 0))}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-md px-2.5 py-1.5 text-xs font-mono font-bold text-white focus:outline-none focus:border-emerald-400"
-                />
+              <div className="mt-2.5 pt-2 border-t border-slate-300/60 text-[11px] text-slate-700 space-y-0.5">
+                <div className="text-[10px]">
+                  {isSurplus ? "✓ Kas saat ini surplus" : "⚠️ Kas masih minus"}
+                </div>
+                <div className="text-[10px] pt-0.5">
+                  Proyeksi jika semua bayar:{" "}
+                  <strong className={isProyeksiSurplus ? "text-emerald-700 font-bold" : "text-rose-700 font-bold"}>
+                    {isProyeksiSurplus ? "+" : ""}Rp {proyeksiKeuntunganBersih.toLocaleString("id-ID")}
+                  </strong>
+                </div>
               </div>
-              <span className="block text-[11px] text-slate-400 mt-1">
-                Subtotal ({totalSessionShuttlecocks} kok terpakai):{" "}
-                <strong className="text-slate-200">
-                  Rp {totalPengeluaranShuttlecock.toLocaleString("id-ID")}
-                </strong>
-              </span>
             </div>
           </div>
-        </div>
 
-        {/* Tabel Ringkas Status Pembayaran Pemain */}
-        <div className="space-y-2">
-          <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-            👥 Rincian Pembayaran per Pemain
-          </h4>
-          <div className="max-h-56 overflow-y-auto rounded-xl border border-slate-800">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-950/80 text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-800 sticky top-0">
-                <tr>
-                  <th className="py-2 px-3">Nama Pemain</th>
-                  <th className="py-2 px-3 text-center">Cock / Main</th>
-                  <th className="py-2 px-3 text-right">Nominal Iuran</th>
-                  <th className="py-2 px-3 text-center w-28">Status Bayar</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/60 bg-slate-900/40">
-                {presentPlayers.map((player) => {
-                  const pStats = playerStatsMap.get(player.id);
-                  const status = paymentStatuses[player.id] || "";
-                  const isPaid = status === "QRIS" || status === "Cash";
+          {/* Setting Harga Manual (Harga Lapangan & Shuttlecock) */}
+          <div className="bg-white/80 border border-slate-200/80 rounded-xl p-4 space-y-3 shadow-xs">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                ⚙️ Pengaturan Biaya Pengeluaran
+              </h4>
+              <button
+                type="button"
+                onClick={() => {
+                  setCourtPrice(62500);
+                  setShuttlecockPrice(8500);
+                }}
+                className="text-[11px] text-amber-700 hover:text-amber-800 font-semibold transition cursor-pointer"
+              >
+                ↺ Reset Default (62.5k / 8.5k)
+              </button>
+            </div>
 
-                  if (player.isAdmin) {
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              {/* Input Harga Lapangan */}
+              <div className="bg-[#F4F7FA] border border-slate-200/90 rounded-lg p-3">
+                <label className="block text-xs font-medium text-slate-600 mb-1">
+                  Harga Sewa per Lapangan (Rp)
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={0}
+                    step={500}
+                    value={courtPrice}
+                    onChange={(e) => setCourtPrice(Math.max(0, parseInt(e.target.value) || 0))}
+                    className="w-full bg-white border border-slate-300 rounded-md px-2.5 py-1.5 text-xs font-mono font-bold text-slate-800 focus:outline-none focus:border-[#357564]"
+                  />
+                </div>
+                <span className="block text-[11px] text-slate-500 mt-1">
+                  Subtotal ({courtCount} lapangan):{" "}
+                  <strong className="text-slate-800">
+                    Rp {totalPengeluaranLapangan.toLocaleString("id-ID")}
+                  </strong>
+                </span>
+              </div>
+
+              {/* Input Harga Shuttlecock */}
+              <div className="bg-[#F4F7FA] border border-slate-200/90 rounded-lg p-3">
+                <label className="block text-xs font-medium text-slate-600 mb-1">
+                  Harga per Shuttlecock (Rp)
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={0}
+                    step={100}
+                    value={shuttlecockPrice}
+                    onChange={(e) => setShuttlecockPrice(Math.max(0, parseInt(e.target.value) || 0))}
+                    className="w-full bg-white border border-slate-300 rounded-md px-2.5 py-1.5 text-xs font-mono font-bold text-slate-800 focus:outline-none focus:border-[#357564]"
+                  />
+                </div>
+                <span className="block text-[11px] text-slate-500 mt-1">
+                  Subtotal ({totalSessionShuttlecocks} kok terpakai):{" "}
+                  <strong className="text-slate-800">
+                    Rp {totalPengeluaranShuttlecock.toLocaleString("id-ID")}
+                  </strong>
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Tabel Ringkas Status Pembayaran Pemain */}
+          <div className="space-y-2">
+            <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+              👥 Rincian Pembayaran per Pemain
+            </h4>
+            <div className="max-h-56 overflow-y-auto rounded-xl border border-slate-200/80 shadow-xs">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-[#E7EEF4] text-slate-600 uppercase tracking-wider font-semibold border-b border-slate-200 sticky top-0">
+                  <tr>
+                    <th className="py-2.5 px-3">Nama Pemain</th>
+                    <th className="py-2.5 px-3 text-center">Cock / Main</th>
+                    <th className="py-2.5 px-3 text-right">Nominal Iuran</th>
+                    <th className="py-2.5 px-3 text-center w-28">Status Bayar</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 bg-white">
+                  {allBilledPlayers.map((player) => {
+                    const pStats = playerStatsMap.get(player.id);
+                    const status = paymentStatuses[player.id] || "";
+                    const isPaid = status === "QRIS" || status === "Cash";
+                    const isEarlyDeparture = !player.isPresent;
+
+                    if (player.isAdmin) {
+                      return (
+                        <tr key={player.id} className="bg-purple-50/50">
+                          <td className="py-2 px-3 font-medium text-purple-900 flex items-center gap-1">
+                            <span>👑 {player.name}</span>
+                            <span className="text-[10px] text-slate-400">(Admin Host)</span>
+                          </td>
+                          <td className="py-2 px-3 text-center text-slate-500">
+                            {pStats?.shuttlecockCount || 0}🏸 / {pStats?.matchesPlayed || 0}m
+                          </td>
+                          <td className="py-2 px-3 text-right font-mono text-purple-700 font-bold">
+                            Gratis
+                          </td>
+                          <td className="py-2 px-3 text-center">
+                            <span className="px-2 py-0.5 rounded text-[10px] bg-purple-100 text-purple-700 border border-purple-200 font-semibold">
+                              Host
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    }
+
                     return (
-                      <tr key={player.id} className="bg-purple-950/10">
-                        <td className="py-2 px-3 font-medium text-purple-300 flex items-center gap-1">
-                          <span>👑 {player.name}</span>
-                          <span className="text-[10px] text-slate-400">(Admin Host)</span>
+                      <tr
+                        key={player.id}
+                        className={`hover:bg-slate-50 transition ${
+                          isPaid ? "bg-emerald-50/30" : isEarlyDeparture ? "bg-amber-50/30" : ""
+                        }`}
+                      >
+                        <td className="py-2 px-3 font-medium text-slate-800">
+                          <div className="flex items-center gap-1.5">
+                            <span>{player.name}</span>
+                            {isEarlyDeparture && (
+                              <span className="text-[10px] text-amber-700 font-medium shrink-0">
+                                (Pulang)
+                              </span>
+                            )}
+                          </div>
                         </td>
-                        <td className="py-2 px-3 text-center text-slate-400">
+                        <td className="py-2 px-3 text-center text-slate-500">
                           {pStats?.shuttlecockCount || 0}🏸 / {pStats?.matchesPlayed || 0}m
                         </td>
-                        <td className="py-2 px-3 text-right font-mono text-purple-300 font-bold">
-                          Gratis
+                        <td className="py-2 px-3 text-right font-mono font-bold text-emerald-700">
+                          Rp {(pStats?.fee || 0).toLocaleString("id-ID")}
                         </td>
                         <td className="py-2 px-3 text-center">
-                          <span className="px-2 py-0.5 rounded text-[10px] bg-purple-400/15 text-purple-200 border border-purple-400/30">
-                            Host
-                          </span>
+                          <select
+                            value={status}
+                            onChange={(e) =>
+                              onUpdatePaymentStatus(
+                                player.id,
+                                e.target.value as "QRIS" | "Cash" | ""
+                              )
+                            }
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono border focus:outline-none cursor-pointer transition ${
+                              status === "QRIS"
+                                ? "bg-sky-50 text-sky-800 border-sky-300"
+                                : status === "Cash"
+                                ? "bg-emerald-50 text-emerald-800 border-emerald-300"
+                                : "bg-slate-100 text-slate-600 border-slate-300"
+                            }`}
+                          >
+                            <option value="" className="bg-white text-slate-500 font-normal">
+                              - Belum -
+                            </option>
+                            <option value="QRIS" className="bg-white text-sky-800 font-bold">
+                              QRIS
+                            </option>
+                            <option value="Cash" className="bg-white text-emerald-800 font-bold">
+                              Cash
+                            </option>
+                          </select>
                         </td>
                       </tr>
                     );
-                  }
-
-                  return (
-                    <tr
-                      key={player.id}
-                      className={`hover:bg-slate-800/40 transition ${
-                        isPaid ? "bg-emerald-950/10" : ""
-                      }`}
-                    >
-                      <td className="py-2 px-3 font-medium text-slate-200">
-                        {player.name}
-                      </td>
-                      <td className="py-2 px-3 text-center text-slate-400">
-                        {pStats?.shuttlecockCount || 0}🏸 / {pStats?.matchesPlayed || 0}m
-                      </td>
-                      <td className="py-2 px-3 text-right font-mono font-bold text-emerald-300">
-                        Rp {(pStats?.fee || 0).toLocaleString("id-ID")}
-                      </td>
-                      <td className="py-2 px-3 text-center">
-                        <select
-                          value={status}
-                          onChange={(e) =>
-                            onUpdatePaymentStatus(
-                              player.id,
-                              e.target.value as "QRIS" | "Cash" | ""
-                            )
-                          }
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono border focus:outline-none cursor-pointer transition ${
-                            status === "QRIS"
-                              ? "bg-sky-400/15 text-sky-200 border-sky-400/35"
-                              : status === "Cash"
-                              ? "bg-emerald-400/15 text-emerald-200 border-emerald-400/35"
-                              : "bg-slate-800 text-slate-400 border-slate-700"
-                          }`}
-                        >
-                          <option value="" className="bg-slate-900 text-slate-400">
-                            - Belum -
-                          </option>
-                          <option value="QRIS" className="bg-slate-900 text-sky-300">
-                            QRIS
-                          </option>
-                          <option value="Cash" className="bg-slate-900 text-emerald-300">
-                            Cash
-                          </option>
-                        </select>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
 
         {/* Footer Modal */}
-        <div className="flex items-center justify-end pt-3 border-t border-slate-800">
+        <div className="flex items-center justify-end px-6 py-4 border-t border-slate-200/80 bg-[#E7EEF4]/60 shrink-0">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 transition"
+            className="px-4 py-2 rounded-xl text-xs font-bold bg-[#357564] hover:bg-[#285B4E] text-white shadow-sm transition cursor-pointer"
           >
             Tutup
           </button>
@@ -3144,6 +3300,17 @@ export default function BadmintonRotationApp() {
     Record<string, "QRIS" | "Cash" | "">
   >({});
 
+  // State Pemain Pulang Lebih Awal (Key: playerId, Value: EarlyDepartureInfo)
+  const [earlyDepartures, setEarlyDepartures] = useState<
+    Record<string, EarlyDepartureInfo>
+  >({});
+
+  // State Konfirmasi Penghapusan Pertandingan Lapangan Tunggal (Key: matchIdx, courtNum)
+  const [courtToDelete, setCourtToDelete] = useState<{
+    matchIdx: number;
+    courtNum: number;
+  } | null>(null);
+
   // Guard: jangan autosave sebelum restore dari localStorage selesai & state ter-update
   const [isRestored, setIsRestored] = useState<boolean>(false);
 
@@ -3163,6 +3330,15 @@ export default function BadmintonRotationApp() {
       if (saved.courtPrice !== undefined) setCourtPrice(saved.courtPrice);
       if (saved.shuttlecockPrice !== undefined) setShuttlecockPrice(saved.shuttlecockPrice);
       if (saved.courtResults) setCourtResults(saved.courtResults);
+      if (saved.earlyDepartures) {
+        const cleaned: Record<string, EarlyDepartureInfo> = {};
+        for (const [id, info] of Object.entries(saved.earlyDepartures)) {
+          if (info && info.matchesPlayed > 0 && Object.keys(info.playedMatchCourts || {}).length > 0) {
+            cleaned[id] = info;
+          }
+        }
+        setEarlyDepartures(cleaned);
+      }
     }
     setIsRestored(true);
   }, []);
@@ -3184,58 +3360,15 @@ export default function BadmintonRotationApp() {
       courtPrice,
       shuttlecockPrice,
       courtResults,
+      earlyDepartures,
     });
   }, [
     isRestored,
     players, projectedMatchCount, courtCount, overrides,
     completedMatches, completedCourts, matchCourtShuttlecocks,
     customFees, paymentStatuses, courtPrice, shuttlecockPrice,
-    courtResults,
+    courtResults, earlyDepartures,
   ]);
-
-  const handleTogglePresent = useCallback((playerId: string) => {
-    setPlayers((prev) => {
-      const target = prev.find((p) => p.id === playerId);
-      if (!target) return prev;
-
-      const nextPresent = !target.isPresent;
-
-      if (nextPresent) {
-        // Pemain menjadi hadir: berikan arrivalOrder tertinggi saat ini + 1
-        const maxArrival = prev
-          .filter((p) => p.isPresent)
-          .reduce((max, p) => Math.max(max, p.arrivalOrder), 0);
-
-        return prev.map((p) =>
-          p.id === playerId
-            ? { ...p, isPresent: true, arrivalOrder: maxArrival + 1 }
-            : p
-        );
-      } else {
-        // Pemain menjadi tidak hadir: arrivalOrder = 0, lalu re-number yang hadir agar tidak ada celah
-        const updated = prev.map((p) =>
-          p.id === playerId
-            ? { ...p, isPresent: false, arrivalOrder: 0 }
-            : p
-        );
-
-        const presentSorted = updated
-          .filter((p) => p.isPresent)
-          .sort((a, b) => a.arrivalOrder - b.arrivalOrder);
-
-        const orderMap = new Map<string, number>();
-        presentSorted.forEach((p, idx) => {
-          orderMap.set(p.id, idx + 1);
-        });
-
-        return updated.map((p) =>
-          p.isPresent && orderMap.has(p.id)
-            ? { ...p, arrivalOrder: orderMap.get(p.id)! }
-            : p
-        );
-      }
-    });
-  }, []);
 
   const handleUpdatePlayerLevel = useCallback((playerId: string, newLevel: number | null) => {
     setPlayers((prev) =>
@@ -3356,6 +3489,7 @@ export default function BadmintonRotationApp() {
       setCourtPrice(62500);
       setShuttlecockPrice(8500);
       setCourtResults({});
+      setEarlyDepartures({});
       setSelectedMatchIdx(null);
       clearSession();
     }
@@ -3376,6 +3510,7 @@ export default function BadmintonRotationApp() {
       courtPrice,
       shuttlecockPrice,
       courtResults,
+      earlyDepartures,
     };
     const json = JSON.stringify(sessionData, null, 2);
     const blob = new Blob([json], { type: "application/json" });
@@ -3397,7 +3532,7 @@ export default function BadmintonRotationApp() {
     players, projectedMatchCount, courtCount, overrides,
     completedMatches, completedCourts, matchCourtShuttlecocks,
     customFees, paymentStatuses, courtPrice, shuttlecockPrice,
-    courtResults,
+    courtResults, earlyDepartures,
   ]);
 
   // ---- IMPORT DATA dari file JSON ----
@@ -3433,6 +3568,7 @@ export default function BadmintonRotationApp() {
         setCourtPrice(data.courtPrice ?? 62500);
         setShuttlecockPrice(data.shuttlecockPrice ?? 8500);
         setCourtResults(data.courtResults ?? {});
+        setEarlyDepartures(data.earlyDepartures ?? {});
         setSelectedMatchIdx(null);
 
         // Simpan juga ke localStorage
@@ -3474,20 +3610,39 @@ export default function BadmintonRotationApp() {
     (
       matchIdx: number,
       courtNum: number,
-      courtData: { teamA: [string, string]; teamB: [string, string] }
+      courtData: { teamA: [string, string]; teamB: [string, string] },
+      isSwap?: boolean,
+      swapType?: "horizontal" | "cross"
     ) => {
       setOverrides((prev) => {
-        const currentMatchOv = prev[matchIdx] || { courts: {}, overriddenCourts: {} };
+        const currentMatchOv = prev[matchIdx] || {
+          courts: {},
+          overriddenCourts: {},
+          emptyCourts: {},
+          courtSwaps: {},
+        };
         const currentCourts = { ...(currentMatchOv.courts || {}) };
         const currentOverridden = { ...(currentMatchOv.overriddenCourts || {}) };
+        const currentEmpty = { ...(currentMatchOv.emptyCourts || {}) };
+        const currentSwaps = { ...(currentMatchOv.courtSwaps || {}) };
 
         currentCourts[courtNum] = courtData;
-        currentOverridden[courtNum] = true;
+        delete currentEmpty[courtNum];
+
+        if (isSwap) {
+          currentSwaps[courtNum] = swapType || "horizontal";
+          delete currentOverridden[courtNum];
+        } else {
+          currentOverridden[courtNum] = true;
+          delete currentSwaps[courtNum];
+        }
 
         const nextMatchOv: MatchOverride = {
           ...currentMatchOv,
           courts: currentCourts,
           overriddenCourts: currentOverridden,
+          emptyCourts: currentEmpty,
+          courtSwaps: currentSwaps,
         };
         if (courtNum === 1) nextMatchOv.court1 = courtData;
         if (courtNum === 2) nextMatchOv.court2 = courtData;
@@ -3512,9 +3667,13 @@ export default function BadmintonRotationApp() {
 
         const currentCourts = { ...(currentMatchOv.courts || {}) };
         const currentOverridden = { ...(currentMatchOv.overriddenCourts || {}) };
+        const currentEmpty = { ...(currentMatchOv.emptyCourts || {}) };
+        const currentSwaps = { ...(currentMatchOv.courtSwaps || {}) };
 
         delete currentCourts[courtNum];
         delete currentOverridden[courtNum];
+        delete currentEmpty[courtNum];
+        delete currentSwaps[courtNum];
 
         if (courtNum === 1) delete currentMatchOv.court1;
         if (courtNum === 2) delete currentMatchOv.court2;
@@ -3522,11 +3681,12 @@ export default function BadmintonRotationApp() {
         if (courtNum === 4) delete currentMatchOv.court4;
         if (courtNum === 5) delete currentMatchOv.court5;
 
-        const remainingKeys = Object.keys(currentCourts).filter(
-          (k) => currentCourts[Number(k)] && currentOverridden[Number(k)]
-        );
+        const hasCourts = Object.keys(currentCourts).some((k) => currentCourts[Number(k)]);
+        const hasOverridden = Object.keys(currentOverridden).some((k) => currentOverridden[Number(k)]);
+        const hasEmpty = Object.keys(currentEmpty).some((k) => currentEmpty[Number(k)]);
+        const hasSwaps = Object.keys(currentSwaps).some((k) => currentSwaps[Number(k)]);
 
-        if (remainingKeys.length === 0) {
+        if (!hasCourts && !hasOverridden && !hasEmpty && !hasSwaps) {
           const next = { ...prev };
           delete next[matchIdx];
           return next;
@@ -3538,6 +3698,8 @@ export default function BadmintonRotationApp() {
             ...currentMatchOv,
             courts: currentCourts,
             overriddenCourts: currentOverridden,
+            emptyCourts: currentEmpty,
+            courtSwaps: currentSwaps,
           },
         };
       });
@@ -3650,6 +3812,32 @@ export default function BadmintonRotationApp() {
           });
         }
 
+        if (!isCompleted) {
+          setEarlyDepartures((prevED) => {
+            let modified = false;
+            const nextED = { ...prevED };
+            for (const [pId, info] of Object.entries(nextED)) {
+              if (info.playedMatchCourts?.[matchIdx] === `c${courtNum}`) {
+                const updatedCourts = { ...info.playedMatchCourts };
+                delete updatedCourts[matchIdx];
+                const remainingMatches = Object.keys(updatedCourts).length;
+                if (remainingMatches === 0) {
+                  delete nextED[pId];
+                  modified = true;
+                } else {
+                  nextED[pId] = {
+                    ...info,
+                    matchesPlayed: remainingMatches,
+                    playedMatchCourts: updatedCourts,
+                  };
+                  modified = true;
+                }
+              }
+            }
+            return modified ? nextED : prevED;
+          });
+        }
+
         return next;
       });
     },
@@ -3692,6 +3880,29 @@ export default function BadmintonRotationApp() {
           const next = { ...prev };
           delete next[matchIdx];
           return next;
+        });
+        setEarlyDepartures((prevED) => {
+          let modified = false;
+          const nextED = { ...prevED };
+          for (const [pId, info] of Object.entries(nextED)) {
+            if (info.playedMatchCourts?.[matchIdx]) {
+              const updatedCourts = { ...info.playedMatchCourts };
+              delete updatedCourts[matchIdx];
+              const remainingMatches = Object.keys(updatedCourts).length;
+              if (remainingMatches === 0) {
+                delete nextED[pId];
+                modified = true;
+              } else {
+                nextED[pId] = {
+                  ...info,
+                  matchesPlayed: remainingMatches,
+                  playedMatchCourts: updatedCourts,
+                };
+                modified = true;
+              }
+            }
+          }
+          return modified ? nextED : prevED;
         });
       }
     },
@@ -3783,16 +3994,32 @@ export default function BadmintonRotationApp() {
 
     for (const player of players) {
       if (!player.isPresent) {
-        map.set(player.id, {
-          matchesPlayed: 0,
-          shuttlecockCount: 0,
-          fee: 0,
-          autoFee: 0,
-          isCustom: false,
-          c1Count: 0,
-          c2Count: 0,
-          courtBreakdown: {},
-        });
+        const earlyInfo = earlyDepartures[player.id];
+        if (earlyInfo) {
+          const isCustom = customFees[player.id] !== undefined;
+          const fee = isCustom ? customFees[player.id] : earlyInfo.fee;
+          map.set(player.id, {
+            matchesPlayed: earlyInfo.matchesPlayed,
+            shuttlecockCount: earlyInfo.shuttlecockCount,
+            fee,
+            autoFee: earlyInfo.autoFee,
+            isCustom,
+            c1Count: 0,
+            c2Count: 0,
+            courtBreakdown: {},
+          });
+        } else {
+          map.set(player.id, {
+            matchesPlayed: 0,
+            shuttlecockCount: 0,
+            fee: 0,
+            autoFee: 0,
+            isCustom: false,
+            c1Count: 0,
+            c2Count: 0,
+            courtBreakdown: {},
+          });
+        }
         continue;
       }
 
@@ -3839,7 +4066,285 @@ export default function BadmintonRotationApp() {
     }
 
     return map;
-  }, [players, projections, matchCourtShuttlecocks, customFees, courtCount]);
+  }, [players, projections, matchCourtShuttlecocks, customFees, courtCount, earlyDepartures]);
+
+  // Daftar pemain yang pulang duluan namun memiliki kewajiban iuran / riwayat main
+  const earlyDepartedPlayers = useMemo(() => {
+    return players.filter((p) => !p.isPresent && earlyDepartures[p.id]);
+  }, [players, earlyDepartures]);
+
+  // Daftar pemain untuk Spreadsheet Rotasi Pemain: pemain yang hadir di atas, pemain pulang di paling bawah
+  const spreadsheetPlayers = useMemo(() => {
+    return [...presentPlayers, ...earlyDepartedPlayers];
+  }, [presentPlayers, earlyDepartedPlayers]);
+
+  const handleTogglePresent = useCallback((playerId: string) => {
+    const target = players.find((p) => p.id === playerId);
+    if (!target) return;
+
+    const nextPresent = !target.isPresent;
+
+    if (nextPresent) {
+      // Pemain hadir kembali -> hapus catatan pulang duluan
+      setEarlyDepartures((prev) => {
+        if (!prev[playerId]) return prev;
+        const next = { ...prev };
+        delete next[playerId];
+        return next;
+      });
+
+      setPlayers((prev) => {
+        const maxArrival = prev
+          .filter((p) => p.isPresent)
+          .reduce((max, p) => Math.max(max, p.arrivalOrder), 0);
+
+        return prev.map((p) =>
+          p.id === playerId
+            ? { ...p, isPresent: true, arrivalOrder: maxArrival + 1 }
+            : p
+        );
+      });
+    } else {
+      // Pemain di-unchecklist (pulang/tidak hadir):
+      // Sesuai aturan: pemain berstatus "Pulang" HANYA jika sudah menyelesaikan setidaknya 1 match yang berstatus SELESAI.
+      // Jika belum ada match selesai yang diikuti, statusnya murni "Tidak Hadir" (bukan pulang).
+      const completedList: {
+        matchIndex: number;
+        courtNum: number;
+        courtCode: string;
+        shuttlecocks: number;
+      }[] = [];
+      const playedMatchCourts: Record<number, string> = {};
+
+      for (const proj of projections) {
+        const m = proj.matchIndex;
+        for (let c = 1; c <= courtCount; c++) {
+          const courtKey = `${m}_c${c}`;
+          const isDone = Boolean(completedCourts[courtKey]) || Boolean(completedMatches[m]);
+          if (isDone) {
+            const cm = completedMatches[m]?.courts?.[c - 1] || proj.courts?.[c - 1];
+            if (cm) {
+              const inTeamA = cm.teamA.player1Id === playerId || cm.teamA.player2Id === playerId;
+              const inTeamB = cm.teamB.player1Id === playerId || cm.teamB.player2Id === playerId;
+              if (inTeamA || inTeamB) {
+                const cCock = matchCourtShuttlecocks[m]?.[`court${c}`] ?? 0;
+                const cCode = `c${c}`;
+                completedList.push({
+                  matchIndex: m,
+                  courtNum: c,
+                  courtCode: cCode,
+                  shuttlecocks: cCock,
+                });
+                playedMatchCourts[m] = cCode;
+              }
+            }
+          }
+        }
+      }
+
+      if (completedList.length >= 1) {
+        // Pemain SUDAH menyelesaikan setidaknya 1 match yang berstatus selesai -> berstatus Pulang
+        const totalCompletedMatches = completedList.length;
+        const totalCompletedCocks = completedList.reduce((sum, item) => sum + item.shuttlecocks, 0);
+        const autoFee = target.isAdmin ? 0 : 11000 + 3000 * totalCompletedCocks;
+        const fee = customFees[playerId] !== undefined ? customFees[playerId] : autoFee;
+
+        setEarlyDepartures((prev) => ({
+          ...prev,
+          [playerId]: {
+            playerId,
+            name: target.name,
+            fee,
+            autoFee,
+            shuttlecockCount: totalCompletedCocks,
+            matchesPlayed: totalCompletedMatches,
+            departureMatchIndex: Math.max(...completedList.map((item) => item.matchIndex)),
+            playedMatchCourts,
+          },
+        }));
+      } else {
+        // Belum menyelesaikan match sama sekali -> status murni tidak hadir, bukan pulang
+        setEarlyDepartures((prev) => {
+          if (!prev[playerId]) return prev;
+          const next = { ...prev };
+          delete next[playerId];
+          return next;
+        });
+      }
+
+      // Bersihkan pemain ini dari formasi manual/override pada match yang BELUM selesai
+      setOverrides((prev) => {
+        let changed = false;
+        const next = { ...prev };
+        for (const [mStr, ov] of Object.entries(next)) {
+          const m = parseInt(mStr);
+          if (completedMatches[m]) continue;
+          if (!ov) continue;
+
+          if (ov.courts) {
+            for (const [cStr, cData] of Object.entries(ov.courts)) {
+              const c = parseInt(cStr);
+              if (Boolean(completedCourts[`${m}_c${c}`])) continue;
+              if (cData && (cData.teamA.includes(playerId) || cData.teamB.includes(playerId))) {
+                delete ov.courts[c];
+                if (ov.courtSwaps) delete ov.courtSwaps[c];
+                if (ov.overriddenCourts) delete ov.overriddenCourts[c];
+                changed = true;
+              }
+            }
+          }
+          if (ov.court1 && !Boolean(completedCourts[`${m}_c1`])) {
+            if (ov.court1.teamA.includes(playerId) || ov.court1.teamB.includes(playerId)) {
+              delete ov.court1;
+              changed = true;
+            }
+          }
+          if (ov.court2 && !Boolean(completedCourts[`${m}_c2`])) {
+            if (ov.court2.teamA.includes(playerId) || ov.court2.teamB.includes(playerId)) {
+              delete ov.court2;
+              changed = true;
+            }
+          }
+          if (Object.keys(ov.courts || {}).length === 0 && !ov.court1 && !ov.court2) {
+            delete next[m];
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+
+      setPlayers((prev) => {
+        const updated = prev.map((p) =>
+          p.id === playerId
+            ? { ...p, isPresent: false, arrivalOrder: 0 }
+            : p
+        );
+
+        const presentSorted = updated
+          .filter((p) => p.isPresent)
+          .sort((a, b) => a.arrivalOrder - b.arrivalOrder);
+
+        const orderMap = new Map<string, number>();
+        presentSorted.forEach((p, idx) => {
+          orderMap.set(p.id, idx + 1);
+        });
+
+        return updated.map((p) =>
+          p.isPresent && orderMap.has(p.id)
+            ? { ...p, arrivalOrder: orderMap.get(p.id)! }
+            : p
+        );
+      });
+    }
+  }, [players, projections, completedCourts, completedMatches, matchCourtShuttlecocks, customFees, courtCount]);
+
+  // Handler Hapus Pertandingan Lapangan Tunggal
+  const handleDeleteCourtMatch = useCallback(
+    (matchIdx: number, courtNum: number, adjustSubsequent: boolean) => {
+      if (!adjustSubsequent) {
+        setOverrides((prev) => {
+          const nextOverrides = { ...prev };
+
+          // Bekukan pertandingan setelah matchIdx agar komposisi pemainnya tidak berubah sama sekali
+          for (let m = matchIdx + 1; m <= projectedMatchCount; m++) {
+            if (!nextOverrides[m]) {
+              const projM = projections.find((p) => p.matchIndex === m);
+              if (projM && projM.courts) {
+                const frozenCourts: Record<number, { teamA: [string, string]; teamB: [string, string] }> = {};
+                const frozenOverridden: Record<number, boolean> = {};
+                projM.courts.forEach((cMatch, idx) => {
+                  const c = idx + 1;
+                  if (cMatch) {
+                    frozenCourts[c] = {
+                      teamA: [cMatch.teamA.player1Id, cMatch.teamA.player2Id],
+                      teamB: [cMatch.teamB.player1Id, cMatch.teamB.player2Id],
+                    };
+                    frozenOverridden[c] = true;
+                  }
+                });
+                nextOverrides[m] = {
+                  courts: frozenCourts,
+                  overriddenCourts: frozenOverridden,
+                };
+              }
+            }
+          }
+
+          // Kosongkan lapangan courtNum pada matchIdx
+          const currentMatchOv = nextOverrides[matchIdx] || {
+            courts: {},
+            overriddenCourts: {},
+            emptyCourts: {},
+            courtSwaps: {},
+          };
+          const currentCourts = { ...(currentMatchOv.courts || {}) };
+          const currentOverridden = { ...(currentMatchOv.overriddenCourts || {}) };
+          const currentEmpty = { ...(currentMatchOv.emptyCourts || {}) };
+          const currentSwaps = { ...(currentMatchOv.courtSwaps || {}) };
+
+          delete currentCourts[courtNum];
+          delete currentOverridden[courtNum];
+          delete currentSwaps[courtNum];
+          currentEmpty[courtNum] = true;
+
+          if (courtNum === 1) delete currentMatchOv.court1;
+          if (courtNum === 2) delete currentMatchOv.court2;
+          if (courtNum === 3) delete currentMatchOv.court3;
+          if (courtNum === 4) delete currentMatchOv.court4;
+          if (courtNum === 5) delete currentMatchOv.court5;
+
+          nextOverrides[matchIdx] = {
+            ...currentMatchOv,
+            courts: currentCourts,
+            overriddenCourts: currentOverridden,
+            emptyCourts: currentEmpty,
+            courtSwaps: currentSwaps,
+          };
+
+          return nextOverrides;
+        });
+      } else {
+        // adjustSubsequent === true: Kosongkan lapangan ini, rotasi otomatis akan menyesuaikan giliran pemain di match berikutnya
+        setOverrides((prev) => {
+          const currentMatchOv = prev[matchIdx] || {
+            courts: {},
+            overriddenCourts: {},
+            emptyCourts: {},
+            courtSwaps: {},
+          };
+          const currentCourts = { ...(currentMatchOv.courts || {}) };
+          const currentOverridden = { ...(currentMatchOv.overriddenCourts || {}) };
+          const currentEmpty = { ...(currentMatchOv.emptyCourts || {}) };
+          const currentSwaps = { ...(currentMatchOv.courtSwaps || {}) };
+
+          delete currentCourts[courtNum];
+          delete currentOverridden[courtNum];
+          delete currentSwaps[courtNum];
+          currentEmpty[courtNum] = true;
+
+          if (courtNum === 1) delete currentMatchOv.court1;
+          if (courtNum === 2) delete currentMatchOv.court2;
+          if (courtNum === 3) delete currentMatchOv.court3;
+          if (courtNum === 4) delete currentMatchOv.court4;
+          if (courtNum === 5) delete currentMatchOv.court5;
+
+          return {
+            ...prev,
+            [matchIdx]: {
+              ...currentMatchOv,
+              courts: currentCourts,
+              overriddenCourts: currentOverridden,
+              emptyCourts: currentEmpty,
+              courtSwaps: currentSwaps,
+            },
+          };
+        });
+      }
+
+      setCourtToDelete(null);
+    },
+    [projections, projectedMatchCount]
+  );
 
   const totalKas = useMemo(() => {
     let total = 0;
@@ -3847,20 +4352,25 @@ export default function BadmintonRotationApp() {
       const pStats = playerStatsMap.get(p.id);
       if (pStats) total += pStats.fee;
     }
+    for (const p of earlyDepartedPlayers) {
+      const pStats = playerStatsMap.get(p.id);
+      if (pStats) total += pStats.fee;
+    }
     return total;
-  }, [presentPlayers, playerStatsMap]);
+  }, [presentPlayers, earlyDepartedPlayers, playerStatsMap]);
 
   // Total pemasukan real yang telah dibayarkan oleh pemain (QRIS / Cash)
   const totalPemasukanTerbayar = useMemo(() => {
     let sum = 0;
-    for (const p of presentPlayers) {
+    const allPayers = [...presentPlayers, ...earlyDepartedPlayers];
+    for (const p of allPayers) {
       if (!p.isAdmin && (paymentStatuses[p.id] === "QRIS" || paymentStatuses[p.id] === "Cash")) {
         const pStats = playerStatsMap.get(p.id);
         if (pStats) sum += pStats.fee;
       }
     }
     return sum;
-  }, [presentPlayers, paymentStatuses, playerStatsMap]);
+  }, [presentPlayers, earlyDepartedPlayers, paymentStatuses, playerStatsMap]);
 
   const stats = useMemo(() => {
     const totalPresent = presentPlayers.length;
@@ -3893,7 +4403,8 @@ export default function BadmintonRotationApp() {
 
     let qrisPaidCount = 0;
     let cashPaidCount = 0;
-    for (const p of presentPlayers) {
+    const allPayers = [...presentPlayers, ...earlyDepartedPlayers];
+    for (const p of allPayers) {
       if (!p.isAdmin) {
         if (paymentStatuses[p.id] === "QRIS") qrisPaidCount++;
         else if (paymentStatuses[p.id] === "Cash") cashPaidCount++;
@@ -3910,12 +4421,12 @@ export default function BadmintonRotationApp() {
       completedCount,
       completedCourtCount,
       totalCourtMatches,
-      regularPresent,
+      regularPresent: allPayers.filter((p) => !p.isAdmin).length,
       qrisPaidCount,
       cashPaidCount,
       totalPaidCount,
     };
-  }, [presentPlayers, overrides, customFees, paymentStatuses, courtCount, completedMatches, completedCourts, projectedMatchCount]);
+  }, [presentPlayers, earlyDepartedPlayers, overrides, customFees, paymentStatuses, courtCount, completedMatches, completedCourts, projectedMatchCount]);
 
   const selectedProjection = useMemo(() => {
     if (!selectedMatchIdx) return null;
@@ -4066,6 +4577,7 @@ export default function BadmintonRotationApp() {
                   ) {
                     setCompletedMatches({});
                     setCompletedCourts({});
+                    setEarlyDepartures({});
                   }
                 }}
                 className="px-2.5 py-1.5 rounded-xl text-xs font-medium bg-emerald-500/20 border border-emerald-400/40 text-emerald-200 hover:bg-emerald-500/30 transition flex items-center gap-1"
@@ -4386,14 +4898,21 @@ export default function BadmintonRotationApp() {
                                     Selesai
                                   </span>
                                 )}
-                                {isCourtOverridden && (
+                                {courtMatch?.isSwapped ? (
+                                  <span
+                                    className="text-[11px] px-1.5 py-0.2 rounded bg-sky-100 text-sky-800 border border-sky-300 font-bold inline-flex items-center"
+                                    title={courtMatch.swapType === "cross" ? "⤧" : "⇄"}
+                                  >
+                                    {courtMatch.swapType === "cross" ? "⤧" : "⇄"}
+                                  </span>
+                                ) : isCourtOverridden ? (
                                   <span
                                     className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300 font-semibold"
                                     title="Formasi lapangan ini diedit secara manual"
                                   >
                                     Override
                                   </span>
-                                )}
+                                ) : null}
                               </div>
                             </td>
 
@@ -4661,6 +5180,22 @@ export default function BadmintonRotationApp() {
                                   <span>✏️</span>
                                   <span className="hidden sm:inline">Edit</span>
                                 </button>
+
+                                {hasMatch && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setCourtToDelete({
+                                        matchIdx: proj.matchIndex,
+                                        courtNum: cNum,
+                                      })
+                                    }
+                                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold bg-white hover:bg-rose-50 text-slate-500 hover:text-rose-600 border border-slate-300 hover:border-rose-300 transition shadow-sm active:scale-95 cursor-pointer"
+                                    title={`Hapus pertandingan Lapangan ${cNum} pada Match ${proj.matchIndex}`}
+                                  >
+                                    <span>🗑️</span>
+                                  </button>
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -4829,7 +5364,7 @@ export default function BadmintonRotationApp() {
               </thead>
 
               <tbody className="divide-y divide-slate-200/80 bg-white/80">
-                {presentPlayers.length === 0 ? (
+                {spreadsheetPlayers.length === 0 ? (
                   <tr>
                     <td
                       colSpan={projectedMatchCount + 1}
@@ -4847,30 +5382,39 @@ export default function BadmintonRotationApp() {
                     </td>
                   </tr>
                 ) : (
-                  presentPlayers.map((player) => {
+                  spreadsheetPlayers.map((player) => {
                     const pStats = playerStatsMap.get(player.id);
                     const fee = pStats?.fee || 0;
                     const isCustom = pStats?.isCustom || false;
                     const cocksUsed = pStats?.shuttlecockCount || 0;
                     const totalPlayed = pStats?.matchesPlayed || 0;
+                    const isEarlyDeparture = !player.isPresent && Boolean(earlyDepartures[player.id]);
 
                     return (
                       <tr
                         key={player.id}
                         className={`transition-colors ${
-                          player.isAdmin ? "bg-[#E6E4F2]/50 hover:bg-[#E6E4F2]/80" : "hover:bg-slate-100/60"
+                          player.isAdmin
+                            ? "bg-[#E6E4F2]/50 hover:bg-[#E6E4F2]/80"
+                            : isEarlyDeparture
+                            ? "bg-amber-50/40 hover:bg-amber-100/40 border-l-4 border-l-amber-400/80"
+                            : "hover:bg-slate-100/60"
                         }`}
                       >
                         {/* Kolom Sticky Pemain (Sumbu Y) */}
                         <td className={`sticky left-0 z-10 py-2 px-3 border-r border-slate-300/70 flex items-center justify-between gap-2 shadow-sm ${
-                          player.isAdmin ? "bg-[#EAE8F5]" : "bg-[#F3F6F9]"
+                          player.isAdmin
+                            ? "bg-[#EAE8F5]"
+                            : isEarlyDeparture
+                            ? "bg-amber-50/90"
+                            : "bg-[#F3F6F9]"
                         }`}>
                           <div className="flex items-center gap-2 overflow-hidden">
                             <span
-                              className={`w-5 h-5 rounded-full text-[10px] font-mono flex items-center justify-center font-bold shrink-0 ${
+                              className={`rounded-full text-[10px] font-mono flex items-center justify-center font-bold shrink-0 ${
                                 player.isAdmin
-                                  ? "bg-[#DCD5EC] text-[#6B46C1] border border-[#C6B8E3]"
-                                  : "bg-slate-200 text-slate-700"
+                                  ? "w-5 h-5 bg-[#DCD5EC] text-[#6B46C1] border border-[#C6B8E3]"
+                                  : "w-5 h-5 bg-slate-200 text-slate-700"
                               }`}
                             >
                               #{player.arrivalOrder}
@@ -4892,6 +5436,14 @@ export default function BadmintonRotationApp() {
                                   title="Ubah nama pemain"
                                   placeholder="Nama pemain..."
                                 />
+                                {isEarlyDeparture && (
+                                  <span
+                                    className="text-[10px] text-amber-700 font-medium shrink-0"
+                                    title="Pemain telah pulang duluan"
+                                  >
+                                    (Pulang)
+                                  </span>
+                                )}
                               </div>
                               {/* Rincian Biaya per Profile */}
                               <div className="flex items-center gap-1.5 mt-0.5">
@@ -4904,21 +5456,16 @@ export default function BadmintonRotationApp() {
                                     <button
                                       type="button"
                                       onClick={() => setEditingFeePlayer(player)}
-                                      className="text-[11px] text-emerald-700 hover:text-emerald-800 font-mono font-bold flex items-center gap-1 transition"
-                                      title="Klik untuk ubah biaya / beri diskon"
+                                      className="text-[11px] text-emerald-700 hover:text-emerald-800 font-mono font-bold flex items-center gap-1 transition cursor-pointer"
+                                      title="Klik untuk ubah biaya manual"
                                     >
                                       <span>Rp {fee.toLocaleString("id-ID")}</span>
-                                      <span className="text-[10px] text-slate-400 hover:text-slate-600">✏️</span>
+                                      {isCustom && (
+                                        <span className="text-[10px] text-amber-600" title="Biaya disesuaikan manual">
+                                          ✏️
+                                        </span>
+                                      )}
                                     </button>
-                                    {isCustom && (
-                                      <span
-                                        className="text-[9px] px-1 py-0.2 rounded bg-amber-100 text-amber-800 border border-amber-300 font-semibold cursor-pointer"
-                                        onClick={() => setEditingFeePlayer(player)}
-                                        title="Biaya disesuaikan manual"
-                                      >
-                                        Diskon
-                                      </span>
-                                    )}
                                     <span className="text-slate-500 font-normal text-[10px]">
                                       ({cocksUsed} 🏸)
                                     </span>
@@ -5004,7 +5551,9 @@ export default function BadmintonRotationApp() {
                         {/* Sel Kolom Match (Sumbu X) */}
                         {projections.map((proj) => {
                           const isCompleted = Boolean(completedMatches[proj.matchIndex]);
-                          const courtCode = proj.playerCourts[player.id];
+                          const courtCode = isEarlyDeparture
+                            ? earlyDepartures[player.id]?.playedMatchCourts?.[proj.matchIndex] || null
+                            : proj.playerCourts[player.id];
 
                           if (courtCode) {
                             const cNum = parseInt(courtCode.replace("c", "")) || 1;
@@ -5143,6 +5692,8 @@ export default function BadmintonRotationApp() {
                 <tbody className="divide-y divide-slate-200/80 bg-white/80">
                   {sortedPlayers.map((player) => {
                     const pStats = playerStatsMap.get(player.id);
+                    const isEarlyDeparture = !player.isPresent && Boolean(earlyDepartures[player.id]);
+
                     return (
                       <tr
                         key={player.id}
@@ -5151,6 +5702,8 @@ export default function BadmintonRotationApp() {
                             ? "bg-[#E6E4F2]/50 border-l-2 border-purple-500"
                             : player.isPresent
                             ? "bg-emerald-50/40"
+                            : isEarlyDeparture
+                            ? "bg-amber-50/20 border-l-2 border-amber-400"
                             : "opacity-60"
                         }`}
                       >
@@ -5196,6 +5749,11 @@ export default function BadmintonRotationApp() {
                                 title="Klik untuk mengedit nama pemain langsung"
                               />
                             </div>
+                            {isEarlyDeparture && (
+                              <span className="text-[10px] text-amber-700 font-medium shrink-0">
+                                (Pulang)
+                              </span>
+                            )}
                           </div>
                         </td>
                         <td className="py-2 px-4 text-center">
@@ -5231,6 +5789,13 @@ export default function BadmintonRotationApp() {
                             >
                               {pStats?.matchesPlayed || 0}m
                             </span>
+                          ) : isEarlyDeparture ? (
+                            <span
+                              className="font-bold text-slate-700"
+                              title={`Bermain ${pStats?.matchesPlayed || 0} match (${pStats?.shuttlecockCount || 0} kok)`}
+                            >
+                              {pStats?.matchesPlayed || 0}m
+                            </span>
                           ) : (
                             <span className="text-slate-400">-</span>
                           )}
@@ -5253,17 +5818,39 @@ export default function BadmintonRotationApp() {
                                 <button
                                   type="button"
                                   onClick={() => setEditingFeePlayer(player)}
-                                  className="text-emerald-700 hover:text-emerald-800 text-xs flex items-center gap-1 transition"
-                                  title="Klik untuk ubah biaya manual / beri diskon"
+                                  className="text-emerald-700 hover:text-emerald-800 text-xs flex items-center gap-1 transition cursor-pointer"
+                                  title="Klik untuk ubah biaya manual"
                                 >
                                   <span>Rp {pStats?.fee.toLocaleString("id-ID")}</span>
-                                  <span className="text-[10px] text-slate-400 hover:text-slate-600">✏️</span>
+                                  {pStats?.isCustom && (
+                                    <span className="text-[10px] text-amber-600" title="Biaya disesuaikan manual">
+                                      ✏️
+                                    </span>
+                                  )}
                                 </button>
-                                {pStats?.isCustom && (
-                                  <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 border border-amber-300 font-semibold">
-                                    Diskon
-                                  </span>
-                                )}
+                              </div>
+                              <span className="text-[10px] text-slate-500 font-normal">
+                                {pStats?.isCustom
+                                  ? `Auto: Rp ${pStats?.autoFee.toLocaleString("id-ID")}`
+                                  : `11k + 3k×${pStats?.shuttlecockCount}`}
+                              </span>
+                            </div>
+                          ) : isEarlyDeparture ? (
+                            <div className="flex flex-col items-end opacity-70">
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingFeePlayer(player)}
+                                  className="text-emerald-700 hover:text-emerald-800 text-xs flex items-center gap-1 transition cursor-pointer"
+                                  title="Klik untuk ubah biaya manual"
+                                >
+                                  <span>Rp {(pStats?.fee || 0).toLocaleString("id-ID")}</span>
+                                  {pStats?.isCustom && (
+                                    <span className="text-[10px] text-amber-600" title="Biaya disesuaikan manual">
+                                      ✏️
+                                    </span>
+                                  )}
+                                </button>
                               </div>
                               <span className="text-[10px] text-slate-500 font-normal">
                                 {pStats?.isCustom
@@ -5432,6 +6019,7 @@ export default function BadmintonRotationApp() {
         setShuttlecockPrice={setShuttlecockPrice}
         totalSessionShuttlecocks={totalSessionShuttlecocks}
         presentPlayers={presentPlayers}
+        earlyDepartedPlayers={earlyDepartedPlayers}
         paymentStatuses={paymentStatuses}
         playerStatsMap={playerStatsMap}
         onUpdatePaymentStatus={handleUpdatePaymentStatus}
@@ -5440,6 +6028,95 @@ export default function BadmintonRotationApp() {
         totalPaidCount={stats.totalPaidCount}
         regularPresent={stats.regularPresent}
       />
+
+      {/* =====================================================================
+          MODAL KONFIRMASI HAPUS MATCH LAPANGAN TUNGGAL (REQUIREMENT 2)
+      ====================================================================== */}
+      {courtToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-md bg-[#F4F7FA] border border-white/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+            <div className="px-6 py-4 border-b border-slate-200/80 bg-[#E7EEF4]/60 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <span className="text-2xl">🗑️</span>
+                <div>
+                  <h3 className="text-base font-bold text-slate-800">
+                    Hapus Match Lapangan {courtToDelete.courtNum}
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Match {courtToDelete.matchIdx} · Lapangan akan dikosongkan
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setCourtToDelete(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 transition cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="bg-amber-50/80 border border-amber-200/80 rounded-xl p-3.5 text-xs text-amber-900 space-y-1.5 shadow-xs">
+                <div className="font-bold flex items-center gap-1.5">
+                  <span>⚠️</span>
+                  <span>Konfirmasi Pengosongan Lapangan</span>
+                </div>
+                <p className="text-slate-600">
+                  Pertandingan di <strong>Lapangan {courtToDelete.courtNum}</strong> pada <strong>Match {courtToDelete.matchIdx}</strong> akan dihapus dan tertulis <em>"- Lapangan Kosong -"</em>.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  Sesuaikan pertandingan selanjutnya?
+                </label>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Pilih <strong>"Ya, Sesuaikan"</strong> jika ingin pemain-pemain yang batal main di lapangan ini otomatis dihitung ulang untuk mendapat prioritas bermain di pertandingan berikutnya.
+                </p>
+                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                  Pilih <strong>"Tidak, Hanya Hapus Ini"</strong> jika ingin susunan pertandingan berikutnya tetap sama seperti saat ini tanpa ada perubahan apapun.
+                </p>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t border-slate-200/80 bg-[#E7EEF4]/60 flex flex-col sm:flex-row items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setCourtToDelete(null)}
+                className="w-full sm:w-auto px-3.5 py-1.5 rounded-xl text-xs font-medium text-slate-700 bg-white border border-slate-300 hover:bg-slate-100 transition cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  handleDeleteCourtMatch(
+                    courtToDelete.matchIdx,
+                    courtToDelete.courtNum,
+                    false
+                  )
+                }
+                className="w-full sm:w-auto px-3.5 py-1.5 rounded-xl text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition cursor-pointer"
+              >
+                Tidak, Hanya Hapus Ini
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  handleDeleteCourtMatch(
+                    courtToDelete.matchIdx,
+                    courtToDelete.courtNum,
+                    true
+                  )
+                }
+                className="w-full sm:w-auto px-4 py-1.5 rounded-xl text-xs font-bold bg-[#357564] hover:bg-[#285B4E] text-white shadow-sm transition cursor-pointer"
+              >
+                Ya, Sesuaikan Selanjutnya
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
