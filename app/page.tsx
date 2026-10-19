@@ -45,6 +45,7 @@ export interface CourtMatch {
   isOverridden?: boolean; // Apakah pertandingan di lapangan ini dimodifikasi manual
   isSwapped?: boolean; // Apakah pertandingan di lapangan ini hanya ditukar posisinya
   swapType?: "horizontal" | "cross";
+  isFixed?: boolean; // Apakah formasi lapangan ini difiksasi melalui tombol checklist
 }
 
 /**
@@ -252,7 +253,6 @@ interface SessionData {
   courtCount: number;
   overrides: Record<number, MatchOverride>;
   completedMatches: Record<number, CompletedMatchInfo>;
-  completedCourts: Record<string, boolean>;
   matchCourtShuttlecocks: Record<number, CourtShuttlecockData>;
   customFees: Record<string, number>;
   paymentStatuses: Record<string, "QRIS" | "Cash" | "">;
@@ -260,6 +260,9 @@ interface SessionData {
   shuttlecockPrice: number;
   courtResults?: Record<string, CourtResult>;
   earlyDepartures?: Record<string, EarlyDepartureInfo>;
+  fixedCourts?: Record<string, { teamA: [string, string]; teamB: [string, string] }>;
+  completedCourts?: Record<string, boolean>;
+  completedCourtsData?: Record<string, { teamA: [string, string]; teamB: [string, string] }>;
 }
 
 function loadSession(): Partial<SessionData> | null {
@@ -610,7 +613,8 @@ export function generateMatchProjections(
   projectionCount: number,
   overrides: Record<number, MatchOverride>,
   courtCount: number = 2,
-  completedMatches: Record<number, CompletedMatchInfo> = {}
+  completedMatches: Record<number, CompletedMatchInfo> = {},
+  fixedCourts: Record<string, { teamA: [string, string]; teamB: [string, string] }> = {}
 ): MatchProjection[] {
   const activePlayers = allPlayers
     .filter((p) => p.isPresent)
@@ -672,16 +676,83 @@ export function generateMatchProjections(
       matchesPlayedSnapshot[p.id] = currentMatchesPlayed.get(p.id) || 0;
     }
 
+    // Helper pembaca override per nomor lapangan
+    const getOverrideForCourt = (c: number) => {
+      const ov = overrides[m];
+      if (!ov) return null;
+      if (ov.courts && ov.courts[c] !== undefined) return ov.courts[c];
+      if (c === 1 && ov.court1) return ov.court1;
+      if (c === 2 && ov.court2) return ov.court2;
+      if (c === 3 && ov.court3) return ov.court3;
+      if (c === 4 && ov.court4) return ov.court4;
+      if (c === 5 && ov.court5) return ov.court5;
+      return null;
+    };
+
+    const isCourtMarkedEmpty = (c: number) => {
+      const ov = overrides[m];
+      if (!ov) return false;
+      if (ov.emptyCourts?.[c]) return true;
+      if (ov.courts && ov.courts[c] === null) return true;
+      return false;
+    };
+
+    const getCourtFixedOrOverride = (c: number) => {
+      const ov = getOverrideForCourt(c);
+      if (ov) return { data: ov, source: "override" as const };
+      const fixed = fixedCourts[`${m}_c${c}`];
+      if (fixed) return { data: fixed, source: "fixed" as const };
+      return null;
+    };
+
     // KASUS 0: MATCH SUDAH DITANDAI SELESAI (TERKUNCI)
     // Formasi dibekukan dan penambahan pemain baru tidak mengubah match ini.
     // Statistik diteruskan untuk melanjutkan match-match berikutnya.
     if (isCompleted && completedData) {
-      const lockedCourts = completedData.courts || [];
-      const lockedPlaying = new Set<string>(completedData.playingPlayerIds || []);
-      const lockedWaiting = new Set<string>(completedData.waitingPlayerIds || []);
+      // Jika user mengedit lapangan pada match selesai ini (Requirement 3), perbarui formasi dengan hasil edit
+      const lockedCourts = (completedData.courts || []).map((cm, idx) => {
+        const cNum = idx + 1;
+        const ov = getOverrideForCourt(cNum);
+        if (ov && ov.teamA && ov.teamB) {
+          const pA1 = playerMap.get(ov.teamA[0]);
+          const pA2 = playerMap.get(ov.teamA[1]);
+          const pB1 = playerMap.get(ov.teamB[0]);
+          const pB2 = playerMap.get(ov.teamB[1]);
+          if (pA1 && pA2 && pB1 && pB2) {
+            const hasAdmin = Boolean(pA1.isAdmin || pA2.isAdmin || pB1.isAdmin || pB2.isAdmin);
+            const teamALvl = (pA1.level ?? 0) + (pA2.level ?? 0);
+            const teamBLvl = (pB1.level ?? 0) + (pB2.level ?? 0);
+            return {
+              courtNumber: cNum,
+              teamA: { player1Id: ov.teamA[0], player2Id: ov.teamA[1] },
+              teamB: { player1Id: ov.teamB[0], player2Id: ov.teamB[1] },
+              teamALevel: teamALvl,
+              teamBLevel: teamBLvl,
+              levelDiff: hasAdmin ? 0 : Math.abs(teamALvl - teamBLvl),
+              isOverridden: true,
+            };
+          }
+        }
+        return cm;
+      });
 
-      lockedCourts.forEach((cm) => courtMatches.push(cm));
+      const lockedPlaying = new Set<string>();
+      lockedCourts.forEach((cm) => {
+        if (cm) {
+          courtMatches.push(cm);
+          lockedPlaying.add(cm.teamA.player1Id);
+          lockedPlaying.add(cm.teamA.player2Id);
+          lockedPlaying.add(cm.teamB.player1Id);
+          lockedPlaying.add(cm.teamB.player2Id);
+        } else {
+          courtMatches.push(null);
+        }
+      });
+      (completedData.playingPlayerIds || []).forEach((id) => {
+        if (!lockedCourts.length) lockedPlaying.add(id);
+      });
       lockedPlaying.forEach((id) => playingIds.add(id));
+      const lockedWaiting = new Set<string>(completedData.waitingPlayerIds || []);
 
       const playerCourts: Record<string, string | null> = {};
 
@@ -710,15 +781,13 @@ export function generateMatchProjections(
       }
 
       // Update pemain yang menunggu pada match selesai ini
-      // PENTING: Pemain baru yang baru hadir/bergabung setelah match ini selesai
-      // tidak ada di lockedWaiting, sehingga waitCount-nya TETAP 0 (tidak dihitung menunggu fiktif).
       const waitingList: string[] = [];
       for (const player of activePlayers) {
         if (playingIds.has(player.id)) continue;
 
         playerCourts[player.id] = null;
 
-        if (lockedWaiting.has(player.id)) {
+        if (lockedWaiting.has(player.id) || !lockedPlaying.has(player.id)) {
           waitingList.push(player.id);
           if (!player.isAdmin) {
             currentWaitCount.set(
@@ -750,37 +819,16 @@ export function generateMatchProjections(
       continue;
     }
 
-    // Helper pembaca override per nomor lapangan
-    const getOverrideForCourt = (c: number) => {
-      const ov = overrides[m];
-      if (!ov) return null;
-      if (ov.courts && ov.courts[c] !== undefined) return ov.courts[c];
-      if (c === 1 && ov.court1) return ov.court1;
-      if (c === 2 && ov.court2) return ov.court2;
-      if (c === 3 && ov.court3) return ov.court3;
-      if (c === 4 && ov.court4) return ov.court4;
-      if (c === 5 && ov.court5) return ov.court5;
-      return null;
-    };
-
-    const isCourtMarkedEmpty = (c: number) => {
-      const ov = overrides[m];
-      if (!ov) return false;
-      if (ov.emptyCourts?.[c]) return true;
-      if (ov.courts && ov.courts[c] === null) return true;
-      return false;
-    };
-
-    let hasAnyOverride = false;
+    let hasAnyFixedOrOverride = false;
     for (let c = 1; c <= courtCount; c++) {
-      if (getOverrideForCourt(c) || isCourtMarkedEmpty(c)) {
-        hasAnyOverride = true;
+      if (getCourtFixedOrOverride(c) || isCourtMarkedEmpty(c)) {
+        hasAnyFixedOrOverride = true;
         break;
       }
     }
 
-    // KASUS A: MATCH INI DIOVERRIDE SECARA MANUAL OLEH USER
-    if (isOverridden && hasAnyOverride) {
+    // KASUS A: MATCH INI MEMILIKI LAPANGAN YANG DIOVERRIDE, DI-FIKSASI, ATAU SUDAH SELESAI
+    if (hasAnyFixedOrOverride) {
       const courtsResult: (CourtMatch | null)[] = Array(courtCount).fill(null);
       const unassignedCourtNums: number[] = [];
 
@@ -790,10 +838,10 @@ export function generateMatchProjections(
           continue;
         }
 
-        const cOv = getOverrideForCourt(c);
-        if (cOv) {
-          const [a1, a2] = cOv.teamA;
-          const [b1, b2] = cOv.teamB;
+        const cInfo = getCourtFixedOrOverride(c);
+        if (cInfo) {
+          const [a1, a2] = cInfo.data.teamA;
+          const [b1, b2] = cInfo.data.teamB;
           const pA1 = playerMap.get(a1);
           const pA2 = playerMap.get(a2);
           const pB1 = playerMap.get(b1);
@@ -809,7 +857,8 @@ export function generateMatchProjections(
             const isCourtSwapped = Boolean(swapVal);
             const swapType: "horizontal" | "cross" | undefined =
               typeof swapVal === "string" ? swapVal : isCourtSwapped ? "horizontal" : undefined;
-            const isCourtOverridden = !isCourtSwapped && Boolean(overrides[m]?.overriddenCourts?.[c]);
+            const isCourtOverridden = cInfo.source === "override" && !isCourtSwapped;
+            const isCourtFixed = cInfo.source === "fixed";
 
             courtsResult[c - 1] = {
               courtNumber: c,
@@ -821,6 +870,7 @@ export function generateMatchProjections(
               isOverridden: isCourtOverridden,
               isSwapped: isCourtSwapped,
               swapType,
+              isFixed: isCourtFixed,
             };
             playingIds.add(a1);
             playingIds.add(a2);
@@ -1302,6 +1352,13 @@ const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
       return;
     }
 
+    if (isCompleted) {
+      const confirmed = window.confirm(
+        `Match ${matchIndex} sudah berstatus SELESAI.\n\nApakah Anda yakin ingin mengubah susunan pemain? Perubahan ini akan memperbarui data match selesai ini dan menyesuaikan proyeksi giliran main di pertandingan berikutnya yang belum selesai.`
+      );
+      if (!confirmed) return;
+    }
+
     onSaveOverride(matchIndex, overrideObj);
     onClose();
   };
@@ -1734,7 +1791,7 @@ interface EditSingleCourtModalProps {
   projection: MatchProjection | null;
   activePlayers: Player[];
   playerMap: Map<string, Player>;
-  isCourtCompleted: boolean;
+  isMatchCompleted?: boolean;
   isCourtOverridden: boolean;
   isCourtSwapped?: boolean;
   swapType?: "horizontal" | "cross";
@@ -1757,7 +1814,7 @@ const EditSingleCourtModal: React.FC<EditSingleCourtModalProps> = ({
   projection,
   activePlayers,
   playerMap,
-  isCourtCompleted,
+  isMatchCompleted = false,
   isCourtOverridden,
   isCourtSwapped,
   swapType,
@@ -1836,6 +1893,13 @@ const EditSingleCourtModal: React.FC<EditSingleCourtModalProps> = ({
     if (uniqueSelected.size !== 4) {
       setErrorMsg("Pemain tidak boleh dipilih ganda dalam lapangan yang sama!");
       return;
+    }
+
+    if (isMatchCompleted) {
+      const confirmed = window.confirm(
+        `Match ${matchIndex} sudah berstatus SELESAI.\n\nApakah Anda yakin ingin mengubah susunan pemain? Perubahan ini akan memperbarui data match selesai ini dan menyesuaikan proyeksi giliran main di pertandingan berikutnya yang belum selesai.`
+      );
+      if (!confirmed) return;
     }
 
     const cm =
@@ -1933,7 +1997,7 @@ const EditSingleCourtModal: React.FC<EditSingleCourtModalProps> = ({
                     Override
                   </span>
                 ) : null}
-                {isCourtCompleted && (
+                {isMatchCompleted && (
                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300 font-semibold">
                     ✓ Selesai
                   </span>
@@ -2188,13 +2252,11 @@ interface MatchRefereeModalProps {
   playerMap: Map<string, Player>;
   allPlayers?: Player[];
   currentResult?: CourtResult | null;
-  isCourtCompleted: boolean;
   refereeStats: Record<string, number>;
   onSaveResult: (
     matchIdx: number,
     courtNum: number,
-    result: { losingTeam: "teamA" | "teamB"; refereePlayerId: string },
-    markCompleted: boolean
+    result: { losingTeam: "teamA" | "teamB"; refereePlayerId: string }
   ) => void;
   onResetResult: (matchIdx: number, courtNum: number) => void;
 }
@@ -2207,7 +2269,6 @@ const MatchRefereeModalContent: React.FC<MatchRefereeModalProps> = ({
   playerMap,
   allPlayers,
   currentResult,
-  isCourtCompleted,
   refereeStats,
   onSaveResult,
   onResetResult,
@@ -2217,9 +2278,6 @@ const MatchRefereeModalContent: React.FC<MatchRefereeModalProps> = ({
   );
   const [selectedRefereeId, setSelectedRefereeId] = useState<string>(
     currentResult?.refereePlayerId || ""
-  );
-  const [markCompleted, setMarkCompleted] = useState<boolean>(
-    isCourtCompleted ? true : true
   );
 
   const theme = COURT_THEMES[courtNum] || COURT_THEMES[1];
@@ -2274,8 +2332,7 @@ const MatchRefereeModalContent: React.FC<MatchRefereeModalProps> = ({
       {
         losingTeam: selectedLosingTeam,
         refereePlayerId: selectedRefereeId,
-      },
-      markCompleted
+      }
     );
   };
 
@@ -2512,19 +2569,6 @@ const MatchRefereeModalContent: React.FC<MatchRefereeModalProps> = ({
               </div>
             </div>
           )}
-
-          {/* OPSI AUTO-SELESAI */}
-          <div className="pt-2 border-t border-slate-200">
-            <label className="flex items-center gap-2.5 p-2.5 rounded-xl bg-white border border-slate-200 text-xs text-slate-700 cursor-pointer select-none hover:border-slate-300 transition shadow-xs">
-              <input
-                type="checkbox"
-                checked={markCompleted}
-                onChange={(e) => setMarkCompleted(e.target.checked)}
-                className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 accent-emerald-600 cursor-pointer"
-              />
-              <span>Tandai pertandingan Match {matchIndex} Lapangan {courtNum} sebagai Selesai</span>
-            </label>
-          </div>
 
           {/* TABEL DATA REKAP FREKUENSI WASIT PESERTA (READ-ONLY) */}
           <div className="pt-3 border-t border-slate-200 space-y-2">
@@ -3249,11 +3293,6 @@ export default function BadmintonRotationApp() {
     Record<number, CompletedMatchInfo>
   >({});
 
-  // State Selesai per Lapangan (Key: `${matchIndex}_c${courtNumber}`, Value: boolean)
-  const [completedCourts, setCompletedCourts] = useState<
-    Record<string, boolean>
-  >({});
-
   // State Hasil Pertandingan & Penunjukan Wasit (Key: `${matchIndex}_c${courtNumber}`, Value: CourtResult)
   const [courtResults, setCourtResults] = useState<Record<string, CourtResult>>({});
 
@@ -3305,11 +3344,20 @@ export default function BadmintonRotationApp() {
     Record<string, EarlyDepartureInfo>
   >({});
 
+  // State Lapangan Fiks / Checklist (Key: `${matchIndex}_c${courtNumber}`, Value: { teamA, teamB })
+  const [fixedCourts, setFixedCourts] = useState<
+    Record<string, { teamA: [string, string]; teamB: [string, string] }>
+  >({});
+
   // State Konfirmasi Penghapusan Pertandingan Lapangan Tunggal (Key: matchIdx, courtNum)
   const [courtToDelete, setCourtToDelete] = useState<{
     matchIdx: number;
     courtNum: number;
   } | null>(null);
+
+  const playerMap = useMemo(() => {
+    return new Map<string, Player>(players.map((p) => [p.id, p]));
+  }, [players]);
 
   // Guard: jangan autosave sebelum restore dari localStorage selesai & state ter-update
   const [isRestored, setIsRestored] = useState<boolean>(false);
@@ -3323,13 +3371,13 @@ export default function BadmintonRotationApp() {
       if (saved.courtCount !== undefined) setCourtCount(saved.courtCount);
       if (saved.overrides) setOverrides(saved.overrides);
       if (saved.completedMatches) setCompletedMatches(saved.completedMatches);
-      if (saved.completedCourts) setCompletedCourts(saved.completedCourts);
       if (saved.matchCourtShuttlecocks) setMatchCourtShuttlecocks(saved.matchCourtShuttlecocks);
       if (saved.customFees) setCustomFees(saved.customFees);
       if (saved.paymentStatuses) setPaymentStatuses(saved.paymentStatuses);
       if (saved.courtPrice !== undefined) setCourtPrice(saved.courtPrice);
       if (saved.shuttlecockPrice !== undefined) setShuttlecockPrice(saved.shuttlecockPrice);
       if (saved.courtResults) setCourtResults(saved.courtResults);
+      if (saved.fixedCourts) setFixedCourts(saved.fixedCourts);
       if (saved.earlyDepartures) {
         const cleaned: Record<string, EarlyDepartureInfo> = {};
         for (const [id, info] of Object.entries(saved.earlyDepartures)) {
@@ -3353,7 +3401,6 @@ export default function BadmintonRotationApp() {
       courtCount,
       overrides,
       completedMatches,
-      completedCourts,
       matchCourtShuttlecocks,
       customFees,
       paymentStatuses,
@@ -3361,13 +3408,14 @@ export default function BadmintonRotationApp() {
       shuttlecockPrice,
       courtResults,
       earlyDepartures,
+      fixedCourts,
     });
   }, [
     isRestored,
     players, projectedMatchCount, courtCount, overrides,
-    completedMatches, completedCourts, matchCourtShuttlecocks,
+    completedMatches, matchCourtShuttlecocks,
     customFees, paymentStatuses, courtPrice, shuttlecockPrice,
-    courtResults, earlyDepartures,
+    courtResults, earlyDepartures, fixedCourts,
   ]);
 
   const handleUpdatePlayerLevel = useCallback((playerId: string, newLevel: number | null) => {
@@ -3466,7 +3514,7 @@ export default function BadmintonRotationApp() {
       setCourtCount(2);
       setOverrides({});
       setCompletedMatches({});
-      setCompletedCourts({});
+      setFixedCourts({});
       setMatchCourtShuttlecocks({});
       setCustomFees({});
       setPaymentStatuses({});
@@ -3482,7 +3530,7 @@ export default function BadmintonRotationApp() {
       setCourtCount(2);
       setOverrides({});
       setCompletedMatches({});
-      setCompletedCourts({});
+      setFixedCourts({});
       setMatchCourtShuttlecocks({});
       setCustomFees({});
       setPaymentStatuses({});
@@ -3503,7 +3551,6 @@ export default function BadmintonRotationApp() {
       courtCount,
       overrides,
       completedMatches,
-      completedCourts,
       matchCourtShuttlecocks,
       customFees,
       paymentStatuses,
@@ -3511,6 +3558,7 @@ export default function BadmintonRotationApp() {
       shuttlecockPrice,
       courtResults,
       earlyDepartures,
+      fixedCourts,
     };
     const json = JSON.stringify(sessionData, null, 2);
     const blob = new Blob([json], { type: "application/json" });
@@ -3530,9 +3578,9 @@ export default function BadmintonRotationApp() {
     URL.revokeObjectURL(url);
   }, [
     players, projectedMatchCount, courtCount, overrides,
-    completedMatches, completedCourts, matchCourtShuttlecocks,
+    completedMatches, matchCourtShuttlecocks,
     customFees, paymentStatuses, courtPrice, shuttlecockPrice,
-    courtResults, earlyDepartures,
+    courtResults, earlyDepartures, fixedCourts,
   ]);
 
   // ---- IMPORT DATA dari file JSON ----
@@ -3561,7 +3609,7 @@ export default function BadmintonRotationApp() {
         setCourtCount(data.courtCount);
         setOverrides(data.overrides ?? {});
         setCompletedMatches(data.completedMatches ?? {});
-        setCompletedCourts(data.completedCourts ?? {});
+        setFixedCourts(data.fixedCourts ?? {});
         setMatchCourtShuttlecocks(data.matchCourtShuttlecocks ?? {});
         setCustomFees(data.customFees ?? {});
         setPaymentStatuses(data.paymentStatuses ?? {});
@@ -3591,12 +3639,75 @@ export default function BadmintonRotationApp() {
     }
   }, []);
 
-  const handleSaveOverride = useCallback((matchIdx: number, override: MatchOverride) => {
-    setOverrides((prev) => ({
-      ...prev,
-      [matchIdx]: override,
-    }));
-  }, []);
+  const handleSaveOverride = useCallback(
+    (matchIdx: number, override: MatchOverride) => {
+      setOverrides((prev) => ({
+        ...prev,
+        [matchIdx]: override,
+      }));
+
+      // Update fixedCourts jika ada lapangan pada match ini yang difiksasi
+      setFixedCourts((prevFixed) => {
+        let changed = false;
+        const nextFixed = { ...prevFixed };
+        for (let c = 1; c <= courtCount; c++) {
+          const key = `${matchIdx}_c${c}`;
+          if (nextFixed[key] && override.courts?.[c]) {
+            nextFixed[key] = override.courts[c]!;
+            changed = true;
+          }
+        }
+        return changed ? nextFixed : prevFixed;
+      });
+
+      // Update completedMatches jika match ini sudah berstatus selesai (Requirement 3)
+      setCompletedMatches((prev) => {
+        const currentCompleted = prev[matchIdx];
+        if (!currentCompleted) return prev;
+
+        const updatedCourts: (CourtMatch | null)[] = [];
+        const playingIds = new Set<string>();
+
+        for (let c = 1; c <= courtCount; c++) {
+          const cData = override.courts?.[c];
+          if (cData) {
+            const pA1 = playerMap.get(cData.teamA[0]);
+            const pA2 = playerMap.get(cData.teamA[1]);
+            const pB1 = playerMap.get(cData.teamB[0]);
+            const pB2 = playerMap.get(cData.teamB[1]);
+            const teamALvl = (pA1?.level ?? 0) + (pA2?.level ?? 0);
+            const teamBLvl = (pB1?.level ?? 0) + (pB2?.level ?? 0);
+
+            updatedCourts.push({
+              courtNumber: c,
+              teamA: { player1Id: cData.teamA[0], player2Id: cData.teamA[1] },
+              teamB: { player1Id: cData.teamB[0], player2Id: cData.teamB[1] },
+              teamALevel: teamALvl,
+              teamBLevel: teamBLvl,
+              levelDiff: Math.abs(teamALvl - teamBLvl),
+              isOverridden: true,
+            });
+            playingIds.add(cData.teamA[0]);
+            playingIds.add(cData.teamA[1]);
+            playingIds.add(cData.teamB[0]);
+            playingIds.add(cData.teamB[1]);
+          } else {
+            updatedCourts.push(currentCompleted.courts?.[c - 1] || null);
+          }
+        }
+
+        return {
+          ...prev,
+          [matchIdx]: {
+            ...currentCompleted,
+            courts: updatedCourts,
+            playingPlayerIds: Array.from(playingIds),
+          },
+        };
+      });
+    },
+    [courtCount, playerMap]
+  );
 
   const handleResetSingleOverride = useCallback((matchIdx: number) => {
     setOverrides((prev) => {
@@ -3614,6 +3725,60 @@ export default function BadmintonRotationApp() {
       isSwap?: boolean,
       swapType?: "horizontal" | "cross"
     ) => {
+      const courtKey = `${matchIdx}_c${courtNum}`;
+
+      // Update fixedCourts jika court ini sedang fiks
+      setFixedCourts((prev) => {
+        if (!prev[courtKey]) return prev;
+        return {
+          ...prev,
+          [courtKey]: courtData,
+        };
+      });
+
+      // Update completedMatches jika match ini sudah berstatus selesai (Requirement 3)
+      setCompletedMatches((prev) => {
+        const currentCompleted = prev[matchIdx];
+        if (!currentCompleted) return prev;
+
+        const updatedCourts = [...(currentCompleted.courts || [])];
+        const pA1 = playerMap.get(courtData.teamA[0]);
+        const pA2 = playerMap.get(courtData.teamA[1]);
+        const pB1 = playerMap.get(courtData.teamB[0]);
+        const pB2 = playerMap.get(courtData.teamB[1]);
+        const teamALvl = (pA1?.level ?? 0) + (pA2?.level ?? 0);
+        const teamBLvl = (pB1?.level ?? 0) + (pB2?.level ?? 0);
+
+        updatedCourts[courtNum - 1] = {
+          courtNumber: courtNum,
+          teamA: { player1Id: courtData.teamA[0], player2Id: courtData.teamA[1] },
+          teamB: { player1Id: courtData.teamB[0], player2Id: courtData.teamB[1] },
+          teamALevel: teamALvl,
+          teamBLevel: teamBLvl,
+          levelDiff: Math.abs(teamALvl - teamBLvl),
+          isOverridden: true,
+        };
+
+        const allPlayingIds = new Set<string>();
+        updatedCourts.forEach((c) => {
+          if (c) {
+            allPlayingIds.add(c.teamA.player1Id);
+            allPlayingIds.add(c.teamA.player2Id);
+            allPlayingIds.add(c.teamB.player1Id);
+            allPlayingIds.add(c.teamB.player2Id);
+          }
+        });
+
+        return {
+          ...prev,
+          [matchIdx]: {
+            ...currentCompleted,
+            courts: updatedCourts,
+            playingPlayerIds: Array.from(allPlayingIds),
+          },
+        };
+      });
+
       setOverrides((prev) => {
         const currentMatchOv = prev[matchIdx] || {
           courts: {},
@@ -3656,11 +3821,19 @@ export default function BadmintonRotationApp() {
         };
       });
     },
-    []
+    [playerMap]
   );
 
   const handleResetCourtOverride = useCallback(
     (matchIdx: number, courtNum: number) => {
+      const courtKey = `${matchIdx}_c${courtNum}`;
+      setFixedCourts((prev) => {
+        if (!prev[courtKey]) return prev;
+        const next = { ...prev };
+        delete next[courtKey];
+        return next;
+      });
+
       setOverrides((prev) => {
         const currentMatchOv = prev[matchIdx];
         if (!currentMatchOv) return prev;
@@ -3763,103 +3936,45 @@ export default function BadmintonRotationApp() {
     });
   }, [players]);
 
-  const playerMap = useMemo(() => {
-    return new Map<string, Player>(players.map((p) => [p.id, p]));
-  }, [players]);
-
   const projections = useMemo(() => {
     return generateMatchProjections(
       players,
       projectedMatchCount,
       overrides,
       courtCount,
-      completedMatches
+      completedMatches,
+      fixedCourts
     );
-  }, [players, projectedMatchCount, overrides, courtCount, completedMatches]);
+  }, [players, projectedMatchCount, overrides, courtCount, completedMatches, fixedCourts]);
 
-  const handleToggleCourtCompleted = useCallback(
-    (matchIdx: number, courtNum: number, isCompleted: boolean) => {
+  // Handler Tombol Checklist Fiks: Kunci formasi lapangan agar tidak berubah otomatis (Requirement 4)
+  const handleToggleCourtFixed = useCallback(
+    (matchIdx: number, courtNum: number) => {
       const key = `${matchIdx}_c${courtNum}`;
-      setCompletedCourts((prev) => {
+      setFixedCourts((prev) => {
         const next = { ...prev };
-        if (isCompleted) {
-          next[key] = true;
-        } else {
+        if (next[key]) {
           delete next[key];
-        }
-
-        // Cek apakah SEMUA lapangan aktif pada match ini telah selesai
-        const allCourtsDone = Array.from({ length: courtCount }, (_, i) => i + 1).every(
-          (c) => Boolean(next[`${matchIdx}_c${c}`])
-        );
-
-        const proj = projections.find((p) => p.matchIndex === matchIdx);
-        if (proj) {
-          setCompletedMatches((prevMatches) => {
-            const nextMatches = { ...prevMatches };
-            if (allCourtsDone) {
-              nextMatches[matchIdx] = {
-                matchIndex: matchIdx,
-                courts: proj.courts,
-                playingPlayerIds: Array.from(proj.playingPlayerIds),
-                waitingPlayerIds: [...proj.waitingPlayerIds],
-                completedAt: nextMatches[matchIdx]?.completedAt || new Date().toISOString(),
-              };
-            } else {
-              delete nextMatches[matchIdx];
-            }
-            return nextMatches;
-          });
-        }
-
-        if (!isCompleted) {
-          setEarlyDepartures((prevED) => {
-            let modified = false;
-            const nextED = { ...prevED };
-            for (const [pId, info] of Object.entries(nextED)) {
-              if (info.playedMatchCourts?.[matchIdx] === `c${courtNum}`) {
-                const updatedCourts = { ...info.playedMatchCourts };
-                delete updatedCourts[matchIdx];
-                const remainingMatches = Object.keys(updatedCourts).length;
-                if (remainingMatches === 0) {
-                  delete nextED[pId];
-                  modified = true;
-                } else {
-                  nextED[pId] = {
-                    ...info,
-                    matchesPlayed: remainingMatches,
-                    playedMatchCourts: updatedCourts,
-                  };
-                  modified = true;
-                }
-              }
-            }
-            return modified ? nextED : prevED;
-          });
-        }
-
-        return next;
-      });
-    },
-    [projections, courtCount]
-  );
-
-  const handleToggleMatchCompleted = useCallback(
-    (matchIdx: number, isCompleted: boolean) => {
-      // Sinkronkan seluruh court aktif pada match ini
-      setCompletedCourts((prev) => {
-        const next = { ...prev };
-        for (let c = 1; c <= courtCount; c++) {
-          const key = `${matchIdx}_c${c}`;
-          if (isCompleted) {
-            next[key] = true;
-          } else {
-            delete next[key];
+        } else {
+          const proj = projections.find((p) => p.matchIndex === matchIdx);
+          const cm =
+            proj?.courts?.[courtNum - 1] ||
+            (courtNum === 1 ? proj?.court1 : courtNum === 2 ? proj?.court2 : null);
+          if (cm && cm.teamA && cm.teamB) {
+            next[key] = {
+              teamA: [cm.teamA.player1Id, cm.teamA.player2Id],
+              teamB: [cm.teamB.player1Id, cm.teamB.player2Id],
+            };
           }
         }
         return next;
       });
+    },
+    [projections]
+  );
 
+  const handleToggleMatchCompleted = useCallback(
+    (matchIdx: number, isCompleted: boolean) => {
       if (isCompleted) {
         // Ambil snapshot formasi match yang sedang aktif untuk dibekukan
         const proj = projections.find((p) => p.matchIndex === matchIdx);
@@ -3906,15 +4021,14 @@ export default function BadmintonRotationApp() {
         });
       }
     },
-    [projections, courtCount]
+    [projections]
   );
 
   const handleSaveCourtResult = useCallback(
     (
       matchIdx: number,
       courtNum: number,
-      result: { losingTeam: "teamA" | "teamB"; refereePlayerId: string },
-      markCompleted: boolean
+      result: { losingTeam: "teamA" | "teamB"; refereePlayerId: string }
     ) => {
       const key = `${matchIdx}_c${courtNum}`;
       setCourtResults((prev) => ({
@@ -3926,13 +4040,9 @@ export default function BadmintonRotationApp() {
           assignedAt: new Date().toISOString(),
         },
       }));
-
-      if (markCompleted) {
-        handleToggleCourtCompleted(matchIdx, courtNum, true);
-      }
       setRefereeModalMatch(null);
     },
-    [handleToggleCourtCompleted]
+    []
   );
 
   const handleResetCourtResult = useCallback(
@@ -4119,8 +4229,7 @@ export default function BadmintonRotationApp() {
       for (const proj of projections) {
         const m = proj.matchIndex;
         for (let c = 1; c <= courtCount; c++) {
-          const courtKey = `${m}_c${c}`;
-          const isDone = Boolean(completedCourts[courtKey]) || Boolean(completedMatches[m]);
+          const isDone = Boolean(completedMatches[m]);
           if (isDone) {
             const cm = completedMatches[m]?.courts?.[c - 1] || proj.courts?.[c - 1];
             if (cm) {
@@ -4184,7 +4293,6 @@ export default function BadmintonRotationApp() {
           if (ov.courts) {
             for (const [cStr, cData] of Object.entries(ov.courts)) {
               const c = parseInt(cStr);
-              if (Boolean(completedCourts[`${m}_c${c}`])) continue;
               if (cData && (cData.teamA.includes(playerId) || cData.teamB.includes(playerId))) {
                 delete ov.courts[c];
                 if (ov.courtSwaps) delete ov.courtSwaps[c];
@@ -4193,13 +4301,13 @@ export default function BadmintonRotationApp() {
               }
             }
           }
-          if (ov.court1 && !Boolean(completedCourts[`${m}_c1`])) {
+          if (ov.court1) {
             if (ov.court1.teamA.includes(playerId) || ov.court1.teamB.includes(playerId)) {
               delete ov.court1;
               changed = true;
             }
           }
-          if (ov.court2 && !Boolean(completedCourts[`${m}_c2`])) {
+          if (ov.court2) {
             if (ov.court2.teamA.includes(playerId) || ov.court2.teamB.includes(playerId)) {
               delete ov.court2;
               changed = true;
@@ -4236,7 +4344,7 @@ export default function BadmintonRotationApp() {
         );
       });
     }
-  }, [players, projections, completedCourts, completedMatches, matchCourtShuttlecocks, customFees, courtCount]);
+  }, [players, projections, completedMatches, matchCourtShuttlecocks, customFees, courtCount]);
 
   // Handler Hapus Pertandingan Lapangan Tunggal
   const handleDeleteCourtMatch = useCallback(
@@ -4341,6 +4449,20 @@ export default function BadmintonRotationApp() {
         });
       }
 
+      const courtKey = `${matchIdx}_c${courtNum}`;
+      setFixedCourts((prev) => {
+        if (!prev[courtKey]) return prev;
+        const next = { ...prev };
+        delete next[courtKey];
+        return next;
+      });
+      setCompletedMatches((prev) => {
+        if (!prev[matchIdx]) return prev;
+        const next = { ...prev };
+        delete next[matchIdx];
+        return next;
+      });
+
       setCourtToDelete(null);
     },
     [projections, projectedMatchCount]
@@ -4392,13 +4514,6 @@ export default function BadmintonRotationApp() {
     const overrideCount = Object.keys(overrides).length;
     const customFeeCount = Object.keys(customFees).length;
     const completedCount = Object.keys(completedMatches).length;
-
-    const completedCourtCount = Object.keys(completedCourts).filter((k) => {
-      const [mStr, cStr] = k.split("_c");
-      const m = parseInt(mStr);
-      const c = parseInt(cStr);
-      return m <= projectedMatchCount && c <= courtCount && completedCourts[k];
-    }).length;
     const totalCourtMatches = projectedMatchCount * courtCount;
 
     let qrisPaidCount = 0;
@@ -4419,14 +4534,13 @@ export default function BadmintonRotationApp() {
       overrideCount,
       customFeeCount,
       completedCount,
-      completedCourtCount,
       totalCourtMatches,
       regularPresent: allPayers.filter((p) => !p.isAdmin).length,
       qrisPaidCount,
       cashPaidCount,
       totalPaidCount,
     };
-  }, [presentPlayers, earlyDepartedPlayers, overrides, customFees, paymentStatuses, courtCount, completedMatches, completedCourts, projectedMatchCount]);
+  }, [presentPlayers, earlyDepartedPlayers, overrides, customFees, paymentStatuses, courtCount, completedMatches, projectedMatchCount]);
 
   const selectedProjection = useMemo(() => {
     if (!selectedMatchIdx) return null;
@@ -4567,23 +4681,22 @@ export default function BadmintonRotationApp() {
               </button>
             </div>
 
-            {stats.completedCourtCount > 0 && (
+            {stats.completedCount > 0 && (
               <button
                 onClick={() => {
                   if (
                     confirm(
-                      `Buka kunci semua (${stats.completedCourtCount}) pertandingan yang sudah selesai? Formasi akan kembali dihitung dinamis.`
+                      `Buka kunci semua (${stats.completedCount}) match yang sudah selesai? Formasi akan kembali dihitung dinamis.`
                     )
                   ) {
                     setCompletedMatches({});
-                    setCompletedCourts({});
                     setEarlyDepartures({});
                   }
                 }}
                 className="px-2.5 py-1.5 rounded-xl text-xs font-medium bg-emerald-500/20 border border-emerald-400/40 text-emerald-200 hover:bg-emerald-500/30 transition flex items-center gap-1"
                 title="Buka kunci semua match selesai"
               >
-                <span>Reset {stats.completedCourtCount} Selesai</span>
+                <span>Reset {stats.completedCount} Selesai</span>
               </button>
             )}
 
@@ -4778,10 +4891,10 @@ export default function BadmintonRotationApp() {
 
               <div className="flex items-center gap-2 text-xs">
                 <span className="px-2.5 py-1 rounded-lg bg-emerald-100 border border-emerald-300 text-emerald-800 font-medium">
-                  {stats.completedCourtCount} Selesai
+                  {stats.completedCount} Match Selesai
                 </span>
                 <span className="px-2.5 py-1 rounded-lg bg-white/80 border border-slate-300 text-slate-600 font-medium">
-                  {stats.totalCourtMatches - stats.completedCourtCount} Belum
+                  {projectedMatchCount - stats.completedCount} Belum
                 </span>
               </div>
             </div>
@@ -4795,14 +4908,13 @@ export default function BadmintonRotationApp() {
                     <th className="py-3 px-4 w-40">Lapangan</th>
                     <th className="py-3 px-4 min-w-[300px]">Pertandingan (Siapa vs Siapa)</th>
                     <th className="py-3 px-4 w-36 text-center">Jumlah Kok</th>
-                    <th className="py-3 px-4 w-36 text-center">Status</th>
                     <th className="py-3 px-4 w-28 text-center">Aksi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200/80 bg-white/80">
                   {presentPlayers.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-12 text-center text-slate-400 italic text-sm">
+                      <td colSpan={5} className="py-12 text-center text-slate-400 italic text-sm">
                         Belum ada pemain yang berstatus hadir.{" "}
                         <button
                           type="button"
@@ -4827,7 +4939,8 @@ export default function BadmintonRotationApp() {
                           matchCourtShuttlecocks[proj.matchIndex]?.[`court${cNum}`] ?? 0;
 
                         const courtKey = `${proj.matchIndex}_c${cNum}`;
-                        const isCourtCompleted = Boolean(completedCourts[courtKey]);
+                        const isMatchCompleted = Boolean(completedMatches[proj.matchIndex]);
+                        const isCourtFixed = Boolean(fixedCourts[courtKey] || courtMatch?.isFixed);
                         const isCourtOverridden = Boolean(courtMatch?.isOverridden);
 
                         const courtResult = courtResults[courtKey];
@@ -4855,8 +4968,10 @@ export default function BadmintonRotationApp() {
                           <tr
                             key={`m${proj.matchIndex}-c${cNum}`}
                             className={`transition-all duration-200 ${
-                              isCourtCompleted
+                              isMatchCompleted
                                 ? "bg-emerald-50/60 hover:bg-emerald-50/90 border-l-4 border-l-emerald-500 shadow-inner"
+                                : isCourtFixed
+                                ? "bg-teal-50/40 hover:bg-teal-50/70 border-l-4 border-l-teal-500"
                                 : "hover:bg-slate-100/60 border-l-4 border-l-transparent"
                             }`}
                           >
@@ -4866,13 +4981,13 @@ export default function BadmintonRotationApp() {
                                 type="button"
                                 onClick={() => setSelectedMatchIdx(proj.matchIndex)}
                                 className={`inline-flex items-center justify-center gap-1 font-mono font-bold text-xs px-2.5 py-1 rounded-md border transition ${
-                                  isCourtCompleted
+                                  isMatchCompleted
                                     ? "bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200 shadow-sm"
                                     : "bg-white text-slate-700 border-slate-300 hover:border-slate-400"
                                 }`}
                                 title={`Lihat detail seluruh Match ${proj.matchIndex}`}
                               >
-                                {isCourtCompleted && (
+                                {isMatchCompleted && (
                                   <span className="text-emerald-700 text-[11px] font-black leading-none">✓</span>
                                 )}
                                 <span>M{proj.matchIndex}</span>
@@ -4884,16 +4999,16 @@ export default function BadmintonRotationApp() {
                               <div className="flex items-center gap-1.5 flex-wrap">
                                 <span
                                   className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border shadow-sm ${
-                                    isCourtCompleted ? `${theme.badgeClass} opacity-85` : theme.badgeClass
+                                    isMatchCompleted ? `${theme.badgeClass} opacity-85` : theme.badgeClass
                                   }`}
                                 >
                                   <span className="w-1.5 h-1.5 rounded-full bg-white"></span>
                                   {theme.name}
                                 </span>
-                                {isCourtCompleted && (
+                                {isMatchCompleted && (
                                   <span
                                     className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold"
-                                    title="Pertandingan lapangan ini sudah selesai"
+                                    title="Match ini sudah selesai"
                                   >
                                     Selesai
                                   </span>
@@ -4913,6 +5028,14 @@ export default function BadmintonRotationApp() {
                                     Override
                                   </span>
                                 ) : null}
+                                {isCourtFixed && !isMatchCompleted && (
+                                  <span
+                                    className="text-[10px] px-1.5 py-0.5 rounded bg-teal-100 text-teal-800 border border-teal-300 font-bold"
+                                    title="Formasi lapangan ini difiksasi (terkunci)"
+                                  >
+                                    Fiks
+                                  </span>
+                                )}
                               </div>
                             </td>
 
@@ -4926,8 +5049,6 @@ export default function BadmintonRotationApp() {
                                       className={`flex items-center gap-1.5 text-sm transition ${
                                         courtResult?.losingTeam === "teamA"
                                           ? "opacity-75 font-medium"
-                                          : isCourtCompleted
-                                          ? "font-bold"
                                           : "font-bold"
                                       }`}
                                     >
@@ -4956,21 +5077,11 @@ export default function BadmintonRotationApp() {
                                           </span>
                                         )}
                                       </span>
-                                      {courtResult?.losingTeam === "teamA" ? (
-                                        <span className="text-[9px] px-1 py-0.2 rounded bg-rose-100 text-rose-700 border border-rose-300 font-semibold flex items-center gap-1">
-                                          <span>Kalah</span>
-                                          {courtResult?.refereePlayerId === "admin" && !pA1?.isAdmin && !pA2?.isAdmin && (
-                                            <span className="text-purple-700 font-bold" title={`Wasit Match ${proj.matchIndex + 1}: Admin (Host)`}>
-                                              (⚖️ Admin)
-                                            </span>
-                                          )}
+                                      {courtResult?.losingTeam === "teamA" && courtResult?.refereePlayerId === "admin" && !pA1?.isAdmin && !pA2?.isAdmin && (
+                                        <span className="text-[10px] text-purple-700 font-bold ml-1" title={`Wasit Match ${proj.matchIndex + 1}: Admin (Host)`}>
+                                          (⚖️ Admin)
                                         </span>
-                                      ) : courtResult?.losingTeam === "teamB" ? (
-                                        <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold flex items-center gap-0.5">
-                                          <span>🏆</span>
-                                          <span>Menang</span>
-                                        </span>
-                                      ) : null}
+                                      )}
                                     </div>
 
                                     {/* Tombol Interaktif VS */}
@@ -4993,8 +5104,6 @@ export default function BadmintonRotationApp() {
                                       className={`flex items-center gap-1.5 text-sm transition ${
                                         courtResult?.losingTeam === "teamB"
                                           ? "opacity-75 font-medium"
-                                          : isCourtCompleted
-                                          ? "font-bold"
                                           : "font-bold"
                                       }`}
                                     >
@@ -5023,21 +5132,11 @@ export default function BadmintonRotationApp() {
                                           </span>
                                         )}
                                       </span>
-                                      {courtResult?.losingTeam === "teamB" ? (
-                                        <span className="text-[9px] px-1 py-0.2 rounded bg-rose-100 text-rose-700 border border-rose-300 font-semibold flex items-center gap-1">
-                                          <span>Kalah</span>
-                                          {courtResult?.refereePlayerId === "admin" && !pB1?.isAdmin && !pB2?.isAdmin && (
-                                            <span className="text-purple-700 font-bold" title={`Wasit Match ${proj.matchIndex + 1}: Admin (Host)`}>
-                                              (⚖️ Admin)
-                                            </span>
-                                          )}
+                                      {courtResult?.losingTeam === "teamB" && courtResult?.refereePlayerId === "admin" && !pB1?.isAdmin && !pB2?.isAdmin && (
+                                        <span className="text-[10px] text-purple-700 font-bold ml-1" title={`Wasit Match ${proj.matchIndex + 1}: Admin (Host)`}>
+                                          (⚖️ Admin)
                                         </span>
-                                      ) : courtResult?.losingTeam === "teamA" ? (
-                                        <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold flex items-center gap-0.5">
-                                          <span>🏆</span>
-                                          <span>Menang</span>
-                                        </span>
-                                      ) : null}
+                                      )}
                                     </div>
                                   </div>
 
@@ -5109,37 +5208,6 @@ export default function BadmintonRotationApp() {
                               </div>
                             </td>
 
-                            {/* Kolom Status Pertandingan */}
-                            <td className="py-3 px-4 text-center">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleToggleCourtCompleted(
-                                    proj.matchIndex,
-                                    cNum,
-                                    !isCourtCompleted
-                                  )
-                                }
-                                className={`inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold border transition shadow-sm select-none cursor-pointer ${
-                                  isCourtCompleted
-                                    ? "bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200"
-                                    : "bg-white text-slate-600 border-slate-300 hover:border-slate-400 hover:bg-slate-50"
-                                }`}
-                                title={
-                                  isCourtCompleted
-                                    ? `Match ${proj.matchIndex} Lapangan ${cNum} sudah Selesai. Klik untuk batalkan.`
-                                    : `Klik untuk menandai Match ${proj.matchIndex} Lapangan ${cNum} Selesai`
-                                }
-                              >
-                                <span
-                                  className={`w-1.5 h-1.5 rounded-full ${
-                                    isCourtCompleted ? "bg-emerald-600" : "bg-slate-400"
-                                  }`}
-                                ></span>
-                                <span>{isCourtCompleted ? "✓ Selesai" : "⏳ Belum"}</span>
-                              </button>
-                            </td>
-
                             {/* Kolom Aksi */}
                             <td className="py-3 px-4 text-center">
                               <div className="inline-flex items-center gap-1.5 justify-center">
@@ -5180,6 +5248,25 @@ export default function BadmintonRotationApp() {
                                   <span>✏️</span>
                                   <span className="hidden sm:inline">Edit</span>
                                 </button>
+
+                                {hasMatch && !isMatchCompleted && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleCourtFixed(proj.matchIndex, cNum)}
+                                    className={`inline-flex items-center justify-center w-7 h-7 rounded-lg text-xs font-bold border transition shadow-xs active:scale-95 cursor-pointer ${
+                                      isCourtFixed
+                                        ? "bg-emerald-600 text-white border-emerald-700 hover:bg-emerald-700 shadow-sm"
+                                        : "bg-white hover:bg-emerald-50 text-slate-400 hover:text-emerald-700 border-slate-300 hover:border-emerald-400"
+                                    }`}
+                                    title={
+                                      isCourtFixed
+                                        ? "Formasi fiks terkunci. Klik untuk buka kunci."
+                                        : "Kunci formasi pertandingan ini (Fiks)"
+                                    }
+                                  >
+                                    <span>✓</span>
+                                  </button>
+                                )}
 
                                 {hasMatch && (
                                   <button
@@ -5927,8 +6014,8 @@ export default function BadmintonRotationApp() {
           }
           activePlayers={presentPlayers}
           playerMap={playerMap}
-          isCourtCompleted={Boolean(
-            completedCourts[`${editingCourtMatch.matchIdx}_c${editingCourtMatch.courtNum}`]
+          isMatchCompleted={Boolean(
+            completedMatches[editingCourtMatch.matchIdx]
           )}
           isCourtOverridden={Boolean(
             overrides[editingCourtMatch.matchIdx]?.overriddenCourts?.[editingCourtMatch.courtNum]
@@ -5968,9 +6055,6 @@ export default function BadmintonRotationApp() {
           currentResult={
             courtResults[`${refereeModalMatch.matchIdx}_c${refereeModalMatch.courtNum}`] || null
           }
-          isCourtCompleted={Boolean(
-            completedCourts[`${refereeModalMatch.matchIdx}_c${refereeModalMatch.courtNum}`]
-          )}
           refereeStats={refereeStats}
           onSaveResult={handleSaveCourtResult}
           onResetResult={handleResetCourtResult}
@@ -6071,10 +6155,10 @@ export default function BadmintonRotationApp() {
                   Sesuaikan pertandingan selanjutnya?
                 </label>
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  Pilih <strong>"Ya, Sesuaikan"</strong> jika ingin pemain-pemain yang batal main di lapangan ini otomatis dihitung ulang untuk mendapat prioritas bermain di pertandingan berikutnya.
+                  Pilih <strong>&quot;Ya, Sesuaikan&quot;</strong> jika ingin pemain-pemain yang batal main di lapangan ini otomatis dihitung ulang untuk mendapat prioritas bermain di pertandingan berikutnya.
                 </p>
                 <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                  Pilih <strong>"Tidak, Hanya Hapus Ini"</strong> jika ingin susunan pertandingan berikutnya tetap sama seperti saat ini tanpa ada perubahan apapun.
+                  Pilih <strong>&quot;Tidak, Hanya Hapus Ini&quot;</strong> jika ingin susunan pertandingan berikutnya tetap sama seperti saat ini tanpa ada perubahan apapun.
                 </p>
               </div>
             </div>
