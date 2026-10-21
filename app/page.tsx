@@ -247,6 +247,14 @@ export const INITIAL_PLAYERS: Player[] = [
 
 const STORAGE_KEY = "daysmash_session";
 
+export interface Booking {
+  id: string;
+  playerIds: [string, string, string, string];
+  fromMatch: number;
+  toMatch: number;
+  assigned?: { matchIndex: number; courtNumber: number };
+}
+
 interface SessionData {
   players: Player[];
   projectedMatchCount: number;
@@ -263,6 +271,7 @@ interface SessionData {
   fixedCourts?: Record<string, { teamA: [string, string]; teamB: [string, string] }>;
   completedCourts?: Record<string, boolean>;
   completedCourtsData?: Record<string, { teamA: [string, string]; teamB: [string, string] }>;
+  bookings?: Booking[];
 }
 
 function loadSession(): Partial<SessionData> | null {
@@ -311,6 +320,9 @@ function isValidSessionData(data: unknown): data is SessionData {
 // ============================================================================
 // 3. LOGIKA ALGORITMA ROTASI & SELEKSI PEMAIN
 // ============================================================================
+
+const PARTNER_GAP_FREE_LIMIT = 2;          // selisih <= 2 tidak kena penalti
+const PARTNER_GAP_PENALTY_PER_LEVEL = 1500;
 
 function calculateMatchCourtPenalty(
   teamA: [Player, Player],
@@ -404,6 +416,20 @@ function calculateMatchCourtPenalty(
     penalty += 2000;
   } else {
     penalty += 25000 + (levelGap - 2) * 10000;
+  }
+
+  // Aturan 4: Penalti selisih level antar rekan satu tim (partner)
+  // Lewati tim yang berisi Admin / level null
+  const teams: [Player, Player][] = [teamA, teamB];
+  for (const team of teams) {
+    const l1 = team[0].level;
+    const l2 = team[1].level;
+    if (l1 != null && l2 != null) {
+      const gap = Math.abs(l1 - l2);
+      if (gap > PARTNER_GAP_FREE_LIMIT) {
+        penalty += (gap - PARTNER_GAP_FREE_LIMIT) * PARTNER_GAP_PENALTY_PER_LEVEL;
+      }
+    }
   }
 
   return penalty;
@@ -1154,6 +1180,282 @@ export function generateMatchProjections(
   }
 
   return results;
+}
+
+export interface ProjectionWarning {
+  severity: "red" | "yellow";
+  code: "DUPLICATE_PLAYER" | "CONSECUTIVE_WHILE_WAITING" | "WAIT_OVER_2" | "REPEAT_PARTNER" | "LEVEL_GAP";
+  matchIndex: number;
+  courtNumber?: number;
+  playerIds: string[];
+  message: string;
+}
+
+export function analyzeProjections(projections: MatchProjection[], players: Player[]): ProjectionWarning[] {
+  const warnings: ProjectionWarning[] = [];
+  const playerMap = new Map<string, Player>(players.map((p) => [p.id, p]));
+  const getName = (id: string) => playerMap.get(id)?.name ?? id;
+  const isAdmin = (id: string) => Boolean(playerMap.get(id)?.isAdmin);
+
+  for (const proj of projections) {
+    const m = proj.matchIndex;
+    const courts = (proj.courts || []).filter(Boolean) as CourtMatch[];
+
+    // --- MERAH: DUPLICATE_PLAYER ---
+    const playerCourtMap = new Map<string, number[]>();
+    for (const cm of courts) {
+      const ids = [cm.teamA.player1Id, cm.teamA.player2Id, cm.teamB.player1Id, cm.teamB.player2Id];
+      for (const id of ids) {
+        if (!playerCourtMap.has(id)) playerCourtMap.set(id, []);
+        playerCourtMap.get(id)!.push(cm.courtNumber);
+      }
+    }
+    for (const [id, courtNums] of playerCourtMap) {
+      if (courtNums.length > 1) {
+        warnings.push({
+          severity: "red", code: "DUPLICATE_PLAYER", matchIndex: m,
+          playerIds: [id],
+          message: `${getName(id)} muncul di ${courtNums.length} lapangan sekaligus (C${courtNums.join(", C")}) pada M${m}`,
+        });
+      }
+    }
+
+    // --- MERAH: WAIT_OVER_2 ---
+    const waitSnap = proj.waitCountsSnapshot || {};
+    for (const wId of (proj.waitingPlayerIds || [])) {
+      if (isAdmin(wId)) continue;
+      if ((waitSnap[wId] ?? 0) >= 2) {
+        warnings.push({
+          severity: "red", code: "WAIT_OVER_2", matchIndex: m,
+          playerIds: [wId],
+          message: `${getName(wId)} sudah menunggu ${(waitSnap[wId] ?? 0) + 1} match berturut-turut (termasuk M${m})`,
+        });
+      }
+    }
+
+    // --- MERAH: CONSECUTIVE_WHILE_WAITING (m >= 2) ---
+    if (m >= 2) {
+      const prevProj = projections.find((p) => p.matchIndex === m - 1);
+      if (prevProj) {
+        const prevWaiting = new Set(prevProj.waitingPlayerIds || []);
+        const curWaiting = new Set(proj.waitingPlayerIds || []);
+        // Non-admin pemain yang menunggu di m-1 DAN m
+        const doubleWaiters = [...curWaiting].filter((id) => prevWaiting.has(id) && !isAdmin(id));
+        if (doubleWaiters.length > 0) {
+          const playingNow = proj.playingPlayerIds;
+          for (const cm of courts) {
+            const ids = [cm.teamA.player1Id, cm.teamA.player2Id, cm.teamB.player1Id, cm.teamB.player2Id];
+            for (const pId of ids) {
+              if (isAdmin(pId)) continue;
+              // pId main di m dan juga main di m-1?
+              const prevPlaying = prevProj.playingPlayerIds;
+              if (playingNow.has(pId) && prevPlaying.has(pId)) {
+                warnings.push({
+                  severity: "red", code: "CONSECUTIVE_WHILE_WAITING", matchIndex: m,
+                  courtNumber: cm.courtNumber,
+                  playerIds: [pId, ...doubleWaiters],
+                  message: `${getName(pId)} main berturut (M${m - 1} & M${m}) sementara ${doubleWaiters.map(getName).join(", ")} menunggu 2 match`,
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // --- KUNING: REPEAT_PARTNER ---
+    if (m >= 2) {
+      for (const cm of courts) {
+        const partners: [string, string][] = [
+          [cm.teamA.player1Id, cm.teamA.player2Id],
+          [cm.teamB.player1Id, cm.teamB.player2Id],
+        ];
+        for (const [a, b] of partners) {
+          if (isAdmin(a) || isAdmin(b)) continue;
+          let foundRepeat = false;
+          for (let pm = m - 1; pm >= Math.max(1, m - 2); pm--) {
+            const prevP = projections.find((p) => p.matchIndex === pm);
+            if (!prevP) continue;
+            for (const prevCm of (prevP.courts || []).filter(Boolean) as CourtMatch[]) {
+              const prevPartners: [string, string][] = [
+                [prevCm.teamA.player1Id, prevCm.teamA.player2Id],
+                [prevCm.teamB.player1Id, prevCm.teamB.player2Id],
+              ];
+              for (const [pa, pb] of prevPartners) {
+                if ((a === pa && b === pb) || (a === pb && b === pa)) {
+                  warnings.push({
+                    severity: "yellow", code: "REPEAT_PARTNER", matchIndex: m,
+                    courtNumber: cm.courtNumber,
+                    playerIds: [a, b],
+                    message: `${getName(a)} & ${getName(b)} satu tim lagi di M${m} (sebelumnya M${pm})`,
+                  });
+                  foundRepeat = true;
+                  break;
+                }
+              }
+              if (foundRepeat) break;
+            }
+            if (foundRepeat) break;
+          }
+        }
+      }
+    }
+
+    // --- KUNING: LEVEL_GAP ---
+    for (const cm of courts) {
+      const hasAdmin = Boolean(
+        isAdmin(cm.teamA.player1Id) ||
+        isAdmin(cm.teamA.player2Id) ||
+        isAdmin(cm.teamB.player1Id) ||
+        isAdmin(cm.teamB.player2Id)
+      );
+      if (!hasAdmin && cm.levelDiff > 2) {
+        warnings.push({
+          severity: "yellow", code: "LEVEL_GAP", matchIndex: m,
+          courtNumber: cm.courtNumber,
+          playerIds: [cm.teamA.player1Id, cm.teamA.player2Id, cm.teamB.player1Id, cm.teamB.player2Id],
+          message: `Selisih level tim di C${cm.courtNumber} M${m} = ${cm.levelDiff} (> 2)`,
+        });
+      }
+    }
+  }
+
+  return warnings;
+}
+
+export interface BookingSlotResult {
+  matchIndex: number;
+  courtNumber: number;
+  teamA: [string, string];
+  teamB: [string, string];
+  redCount: number;
+  yellowCount: number;
+  score: number;
+  warnings?: ProjectionWarning[];
+}
+
+export function findBestBookingSlots(
+  booking: Booking,
+  context: {
+    players: Player[];
+    projectedMatchCount: number;
+    overrides: Record<number, MatchOverride>;
+    courtCount: number;
+    completedMatches: Record<number, CompletedMatchInfo>;
+    fixedCourts: Record<string, { teamA: [string, string]; teamB: [string, string] }>;
+  }
+): BookingSlotResult[] {
+  const { players, projectedMatchCount, overrides, courtCount, completedMatches, fixedCourts } = context;
+  const [p0, p1, p2, p3] = booking.playerIds;
+  const candidatePairings: [[string, string], [string, string]][] = [
+    [[p0, p1], [p2, p3]],
+    [[p0, p2], [p1, p3]],
+    [[p0, p3], [p1, p2]],
+  ];
+
+  const minM = Math.max(1, booking.fromMatch);
+  const maxM = Math.min(projectedMatchCount, booking.toMatch);
+  const slotCandidates: BookingSlotResult[] = [];
+  let evalCount = 0;
+  const MAX_EVALS = 300;
+
+  for (let m = minM; m <= maxM; m++) {
+    if (completedMatches[m]) continue;
+    const ovM = overrides[m];
+
+    for (let c = 1; c <= courtCount; c++) {
+      if (ovM?.emptyCourts?.[c] || ovM?.courts?.[c] === null) continue;
+      if (ovM?.courts?.[c]) continue;
+      if (fixedCourts[`${m}_c${c}`]) continue;
+
+      // Cek apakah ada pemain booking yang sudah berada di override/fixed lapangan lain pada match m
+      let playerConflict = false;
+      for (let otherC = 1; otherC <= courtCount; otherC++) {
+        if (otherC === c) continue;
+        const otherOv = ovM?.courts?.[otherC];
+        if (otherOv && otherOv.teamA && otherOv.teamB) {
+          const busy = [...otherOv.teamA, ...otherOv.teamB];
+          if (booking.playerIds.some((pid) => busy.includes(pid))) {
+            playerConflict = true;
+            break;
+          }
+        }
+        const otherFixed = fixedCourts[`${m}_c${otherC}`];
+        if (otherFixed && otherFixed.teamA && otherFixed.teamB) {
+          const busy = [...otherFixed.teamA, ...otherFixed.teamB];
+          if (booking.playerIds.some((pid) => busy.includes(pid))) {
+            playerConflict = true;
+            break;
+          }
+        }
+      }
+      if (playerConflict) continue;
+
+      let bestSlotForCourt: BookingSlotResult | null = null;
+
+      for (const [teamA, teamB] of candidatePairings) {
+        if (evalCount >= MAX_EVALS) break;
+        evalCount++;
+
+        const tempFixed = {
+          ...fixedCourts,
+          [`${m}_c${c}`]: { teamA, teamB },
+        };
+
+        const tempProjections = generateMatchProjections(
+          players,
+          projectedMatchCount,
+          overrides,
+          courtCount,
+          completedMatches,
+          tempFixed
+        );
+
+        const tempWarnings = analyzeProjections(tempProjections, players);
+        const redCount = tempWarnings.filter((w) => w.severity === "red").length;
+        const yellowCount = tempWarnings.filter((w) => w.severity === "yellow").length;
+        const score = 1000 * redCount + 10 * yellowCount;
+
+        const candidateResult: BookingSlotResult = {
+          matchIndex: m,
+          courtNumber: c,
+          teamA,
+          teamB,
+          redCount,
+          yellowCount,
+          score,
+          warnings: tempWarnings,
+        };
+
+        if (
+          !bestSlotForCourt ||
+          candidateResult.score < bestSlotForCourt.score ||
+          (candidateResult.score === bestSlotForCourt.score &&
+            (candidateResult.redCount < bestSlotForCourt.redCount ||
+              (candidateResult.redCount === bestSlotForCourt.redCount &&
+                candidateResult.yellowCount < bestSlotForCourt.yellowCount)))
+        ) {
+          bestSlotForCourt = candidateResult;
+        }
+      }
+
+      if (bestSlotForCourt) {
+        slotCandidates.push(bestSlotForCourt);
+      }
+      if (evalCount >= MAX_EVALS) break;
+    }
+    if (evalCount >= MAX_EVALS) break;
+  }
+
+  slotCandidates.sort((a, b) => {
+    if (a.score !== b.score) return a.score - b.score;
+    if (a.redCount !== b.redCount) return a.redCount - b.redCount;
+    if (a.yellowCount !== b.yellowCount) return a.yellowCount - b.yellowCount;
+    if (a.matchIndex !== b.matchIndex) return a.matchIndex - b.matchIndex;
+    return a.courtNumber - b.courtNumber;
+  });
+
+  return slotCandidates.slice(0, 3);
 }
 
 // ============================================================================
@@ -3277,6 +3579,409 @@ const FinanceModal: React.FC<FinanceModalProps> = ({
 };
 
 // ============================================================================
+// 4e. SUBKOMPONEN MODAL: BOOKING PERTANDINGAN
+// ============================================================================
+
+interface BookingModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  players: Player[];
+  courtCount: number;
+  projectedMatchCount: number;
+  overrides: Record<number, MatchOverride>;
+  completedMatches: Record<number, CompletedMatchInfo>;
+  fixedCourts: Record<string, { teamA: [string, string]; teamB: [string, string] }>;
+  bookings: Booking[];
+  onSaveBooking: (booking: Booking, slot: BookingSlotResult) => void;
+  onDeleteBooking: (bookingId: string) => void;
+  onReSearchBooking: (booking: Booking) => void;
+}
+
+const BookingModal: React.FC<BookingModalProps> = ({
+  isOpen,
+  onClose,
+  players,
+  courtCount,
+  projectedMatchCount,
+  overrides,
+  completedMatches,
+  fixedCourts,
+  bookings,
+  onSaveBooking,
+  onDeleteBooking,
+  onReSearchBooking,
+}) => {
+  const eligiblePlayers = useMemo(
+    () => players.filter((p) => p.isPresent || p.isAdmin),
+    [players]
+  );
+  const playerMap = useMemo(() => new Map(players.map((p) => [p.id, p])), [players]);
+  const getName = (id: string) => playerMap.get(id)?.name || id;
+
+  const [p0, setP0] = useState<string>("");
+  const [p1, setP1] = useState<string>("");
+  const [p2, setP2] = useState<string>("");
+  const [p3, setP3] = useState<string>("");
+  const [fromMatch, setFromMatch] = useState<number>(1);
+  const [toMatch, setToMatch] = useState<number>(projectedMatchCount || 8);
+  const [activeBookingId, setActiveBookingId] = useState<string | null>(null);
+  const [searchResults, setSearchResults] = useState<BookingSlotResult[] | null>(null);
+  const [hasSearched, setHasSearched] = useState<boolean>(false);
+
+  // Set default players jika belum terpilih
+  useEffect(() => {
+    if (isOpen) {
+      if (!p0 && eligiblePlayers[0]) setP0(eligiblePlayers[0].id);
+      if (!p1 && eligiblePlayers[1]) setP1(eligiblePlayers[1].id);
+      if (!p2 && eligiblePlayers[2]) setP2(eligiblePlayers[2].id);
+      if (!p3 && eligiblePlayers[3]) setP3(eligiblePlayers[3].id);
+      setToMatch(projectedMatchCount);
+    }
+  }, [isOpen, eligiblePlayers, projectedMatchCount]);
+
+  if (!isOpen) return null;
+
+  const handleSearch = () => {
+    const ids = [p0, p1, p2, p3];
+    if (ids.some((id) => !id)) {
+      alert("Harap pilih 4 pemain terlebih dahulu.");
+      return;
+    }
+    if (new Set(ids).size < 4) {
+      alert("Keempat pemain harus berbeda!");
+      return;
+    }
+    if (fromMatch > toMatch) {
+      alert("Match 'Dari' tidak boleh lebih besar dari Match 'Sampai'.");
+      return;
+    }
+
+    const booking: Booking = {
+      id: activeBookingId || `b_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      playerIds: [p0, p1, p2, p3],
+      fromMatch: Math.max(1, fromMatch),
+      toMatch: Math.max(fromMatch, toMatch),
+    };
+
+    const results = findBestBookingSlots(booking, {
+      players,
+      projectedMatchCount,
+      overrides,
+      courtCount,
+      completedMatches,
+      fixedCourts,
+    });
+
+    setSearchResults(results);
+    setHasSearched(true);
+  };
+
+  const handleSelectSlot = (slot: BookingSlotResult) => {
+    const booking: Booking = {
+      id: activeBookingId || `b_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      playerIds: [p0, p1, p2, p3],
+      fromMatch: Math.max(1, fromMatch),
+      toMatch: Math.max(fromMatch, toMatch),
+    };
+    onSaveBooking(booking, slot);
+    setActiveBookingId(null);
+    setSearchResults(null);
+    setHasSearched(false);
+  };
+
+  const handleStartReSearch = (b: Booking) => {
+    setP0(b.playerIds[0]);
+    setP1(b.playerIds[1]);
+    setP2(b.playerIds[2]);
+    setP3(b.playerIds[3]);
+    setFromMatch(b.fromMatch);
+    setToMatch(b.toMatch);
+    setActiveBookingId(b.id);
+    onReSearchBooking(b);
+
+    // Cari langsung dengan context yang fixed lamanya sudah dihapus
+    const tempFixed = { ...fixedCourts };
+    if (b.assigned) {
+      delete tempFixed[`${b.assigned.matchIndex}_c${b.assigned.courtNumber}`];
+    }
+    const results = findBestBookingSlots(b, {
+      players,
+      projectedMatchCount,
+      overrides,
+      courtCount,
+      completedMatches,
+      fixedCourts: tempFixed,
+    });
+    setSearchResults(results);
+    setHasSearched(true);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="relative w-full max-w-2xl bg-[#F4F7FA] border border-white/80 rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+        {/* Header Modal */}
+        <div className="px-6 py-4 border-b border-slate-200/80 bg-[#E7EEF4]/60 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2.5">
+            <span className="text-2xl">📌</span>
+            <div>
+              <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                <span>Booking Lapangan &amp; Pemain</span>
+              </h3>
+              <p className="text-xs text-slate-500">
+                Pilih 4 pemain dan rentang match untuk mencari slot pertandingan terbaik tanpa merusak rotasi.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 transition cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Scrollable Modal Body */}
+        <div className="p-5 sm:p-6 space-y-5 overflow-y-auto">
+          {/* Form Pemilihan 4 Pemain */}
+          <div className="p-4 bg-white border border-slate-200/80 rounded-xl shadow-xs space-y-4">
+            <h4 className="font-bold text-xs uppercase tracking-wider text-slate-600">
+              1. Pilih 4 Pemain
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {[
+                { label: "Pemain 1", val: p0, set: setP0 },
+                { label: "Pemain 2", val: p1, set: setP1 },
+                { label: "Pemain 3", val: p2, set: setP2 },
+                { label: "Pemain 4", val: p3, set: setP3 },
+              ].map((item, idx) => (
+                <div key={idx}>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                    {item.label}
+                  </label>
+                  <select
+                    value={item.val}
+                    onChange={(e) => item.set(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium cursor-pointer"
+                  >
+                    <option value="">-- Pilih Pemain --</option>
+                    {eligiblePlayers.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.isAdmin ? "👑 " : ""}{p.name} {p.level != null ? `(Lvl ${p.level})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ))}
+            </div>
+
+            <div className="pt-2 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                  Dari Match
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={projectedMatchCount}
+                  value={fromMatch}
+                  onChange={(e) => setFromMatch(Math.max(1, parseInt(e.target.value) || 1))}
+                  className="w-full px-3 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                  Sampai Match
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={projectedMatchCount}
+                  value={toMatch}
+                  onChange={(e) => setToMatch(Math.max(1, parseInt(e.target.value) || 1))}
+                  className="w-full px-3 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-[11px] text-slate-400">
+                {activeBookingId ? "Mode: Cari ulang booking tersimpan" : "Mode: Booking baru"}
+              </span>
+              <button
+                type="button"
+                onClick={handleSearch}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-sm transition active:scale-95 cursor-pointer flex items-center gap-1.5"
+              >
+                <span>🔍 Cari Slot Terbaik</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Hasil Pencarian Slot */}
+          {hasSearched && (
+            <div className="p-4 bg-white border border-slate-200/80 rounded-xl shadow-xs space-y-3">
+              <h4 className="font-bold text-xs uppercase tracking-wider text-slate-600">
+                2. Rekomendasi Slot Terbaik
+              </h4>
+              {!searchResults || searchResults.length === 0 ? (
+                <div className="py-6 text-center text-slate-500 italic text-xs">
+                  Tidak ada slot yang tersedia pada rentang match dan lapangan yang dipilih.
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {searchResults.map((slot, sIdx) => (
+                    <div
+                      key={sIdx}
+                      className="p-3 rounded-xl border border-indigo-200 bg-indigo-50/40 hover:bg-indigo-50/80 transition flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                    >
+                      <div className="space-y-1.5 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="px-2 py-0.5 rounded-md bg-indigo-600 text-white font-mono font-bold text-xs">
+                            M{slot.matchIndex}
+                          </span>
+                          <span className="font-semibold text-slate-800 text-xs">
+                            Lapangan {slot.courtNumber}
+                          </span>
+                          {slot.redCount === 0 && slot.yellowCount === 0 ? (
+                            <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold border border-emerald-200">
+                              ✓ 0 Peringatan
+                            </span>
+                          ) : (
+                            <div className="flex items-center gap-1">
+                              {slot.redCount > 0 && (
+                                <span className="px-1.5 py-0.5 rounded bg-red-100 text-red-700 text-[10px] font-bold border border-red-200">
+                                  🔴 {slot.redCount}
+                                </span>
+                              )}
+                              {slot.yellowCount > 0 && (
+                                <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-[10px] font-bold border border-amber-200">
+                                  🟡 {slot.yellowCount}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        <div className="text-xs text-slate-700 font-medium">
+                          <span className="text-indigo-900 font-semibold">{getName(slot.teamA[0])} + {getName(slot.teamA[1])}</span>
+                          <span className="text-slate-400 mx-1.5 font-bold">vs</span>
+                          <span className="text-indigo-900 font-semibold">{getName(slot.teamB[0])} + {getName(slot.teamB[1])}</span>
+                        </div>
+
+                        {/* Rincian Peringatan / Catatan Slot */}
+                        {slot.warnings && slot.warnings.length > 0 ? (
+                          <div className="pt-1 space-y-1">
+                            {slot.warnings.map((w, wIdx) => (
+                              <div
+                                key={wIdx}
+                                className={`text-[11px] px-2 py-1 rounded-md border flex items-start gap-1.5 leading-snug ${
+                                  w.severity === "red"
+                                    ? "bg-red-50 text-red-800 border-red-200"
+                                    : "bg-amber-50 text-amber-800 border-amber-200"
+                                }`}
+                              >
+                                <span className="shrink-0">{w.severity === "red" ? "🔴" : "🟡"}</span>
+                                <span>{w.message}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-[11px] text-emerald-700 font-medium flex items-center gap-1 pt-0.5">
+                            <span>✓</span>
+                            <span>Rotasi optimal (tidak ada bentrok / penalti)</span>
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleSelectSlot(slot)}
+                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-xs transition active:scale-95 cursor-pointer shrink-0 self-start sm:self-center"
+                      >
+                        Pasang Slot Ini
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Daftar Booking Tersimpan */}
+          {bookings && bookings.length > 0 && (
+            <div className="p-4 bg-white border border-slate-200/80 rounded-xl shadow-xs space-y-3">
+              <h4 className="font-bold text-xs uppercase tracking-wider text-slate-600 flex items-center justify-between">
+                <span>3. Booking Tersimpan ({bookings.length})</span>
+              </h4>
+              <div className="space-y-2">
+                {bookings.map((b) => {
+                  const key = b.assigned ? `${b.assigned.matchIndex}_c${b.assigned.courtNumber}` : null;
+                  const fc = key ? fixedCourts[key] : null;
+                  const fcPlayers = fc ? [...fc.teamA, ...fc.teamB] : [];
+                  const isAssignedActive = Boolean(
+                    b.assigned && fc && b.playerIds.every((pid) => fcPlayers.includes(pid))
+                  );
+
+                  return (
+                    <div
+                      key={b.id}
+                      className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs"
+                    >
+                      <div>
+                        <div className="font-semibold text-slate-800">
+                          {b.playerIds.map((id) => getName(id)).join(", ")}
+                        </div>
+                        <div className="text-slate-500 text-[11px] mt-0.5 flex items-center gap-2">
+                          <span>Rentang: M{b.fromMatch} - M{b.toMatch}</span>
+                          {isAssignedActive ? (
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold border border-emerald-300">
+                              Terpasang M{b.assigned!.matchIndex} L{b.assigned!.courtNumber}
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full bg-slate-200 text-slate-600 font-semibold border border-slate-300">
+                              Belum terpasang
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleStartReSearch(b)}
+                          className="px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold border border-indigo-200 transition active:scale-95 cursor-pointer"
+                        >
+                          Cari ulang
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onDeleteBooking(b.id)}
+                          className="px-2.5 py-1 rounded-lg bg-red-50 hover:bg-red-100 text-red-700 font-semibold border border-red-200 transition active:scale-95 cursor-pointer"
+                        >
+                          Hapus
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer Modal */}
+        <div className="flex items-center justify-end px-6 py-4 border-t border-slate-200/80 bg-[#E7EEF4]/60 shrink-0">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 rounded-xl text-xs font-bold bg-[#357564] hover:bg-[#285B4E] text-white shadow-sm transition cursor-pointer"
+          >
+            Tutup
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ============================================================================
 // 5. HALAMAN UTAMA (MAIN CLIENT COMPONENT)
 // ============================================================================
 
@@ -3349,6 +4054,21 @@ export default function BadmintonRotationApp() {
     Record<string, { teamA: [string, string]; teamB: [string, string] }>
   >({});
 
+  // State Booking Pertandingan
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [isBookingModalOpen, setIsBookingModalOpen] = useState<boolean>(false);
+
+  // State Popover Warning yang sedang terbuka (Key: "header" atau `${matchIndex}_c${courtNumber}`)
+  const [openWarningKey, setOpenWarningKey] = useState<string | null>(null);
+
+  // Listener tutup popover saat klik di luar
+  useEffect(() => {
+    if (!openWarningKey) return;
+    const handleClickOutside = () => setOpenWarningKey(null);
+    document.addEventListener("click", handleClickOutside);
+    return () => document.removeEventListener("click", handleClickOutside);
+  }, [openWarningKey]);
+
   // State Konfirmasi Penghapusan Pertandingan Lapangan Tunggal (Key: matchIdx, courtNum)
   const [courtToDelete, setCourtToDelete] = useState<{
     matchIdx: number;
@@ -3378,6 +4098,7 @@ export default function BadmintonRotationApp() {
       if (saved.shuttlecockPrice !== undefined) setShuttlecockPrice(saved.shuttlecockPrice);
       if (saved.courtResults) setCourtResults(saved.courtResults);
       if (saved.fixedCourts) setFixedCourts(saved.fixedCourts);
+      if (saved.bookings) setBookings(saved.bookings);
       if (saved.earlyDepartures) {
         const cleaned: Record<string, EarlyDepartureInfo> = {};
         for (const [id, info] of Object.entries(saved.earlyDepartures)) {
@@ -3409,13 +4130,14 @@ export default function BadmintonRotationApp() {
       courtResults,
       earlyDepartures,
       fixedCourts,
+      bookings,
     });
   }, [
     isRestored,
     players, projectedMatchCount, courtCount, overrides,
     completedMatches, matchCourtShuttlecocks,
     customFees, paymentStatuses, courtPrice, shuttlecockPrice,
-    courtResults, earlyDepartures, fixedCourts,
+    courtResults, earlyDepartures, fixedCourts, bookings,
   ]);
 
   const handleUpdatePlayerLevel = useCallback((playerId: string, newLevel: number | null) => {
@@ -3515,6 +4237,7 @@ export default function BadmintonRotationApp() {
       setOverrides({});
       setCompletedMatches({});
       setFixedCourts({});
+      setBookings([]);
       setMatchCourtShuttlecocks({});
       setCustomFees({});
       setPaymentStatuses({});
@@ -3531,6 +4254,7 @@ export default function BadmintonRotationApp() {
       setOverrides({});
       setCompletedMatches({});
       setFixedCourts({});
+      setBookings([]);
       setMatchCourtShuttlecocks({});
       setCustomFees({});
       setPaymentStatuses({});
@@ -3559,6 +4283,7 @@ export default function BadmintonRotationApp() {
       courtResults,
       earlyDepartures,
       fixedCourts,
+      bookings,
     };
     const json = JSON.stringify(sessionData, null, 2);
     const blob = new Blob([json], { type: "application/json" });
@@ -3580,7 +4305,7 @@ export default function BadmintonRotationApp() {
     players, projectedMatchCount, courtCount, overrides,
     completedMatches, matchCourtShuttlecocks,
     customFees, paymentStatuses, courtPrice, shuttlecockPrice,
-    courtResults, earlyDepartures, fixedCourts,
+    courtResults, earlyDepartures, fixedCourts, bookings,
   ]);
 
   // ---- IMPORT DATA dari file JSON ----
@@ -3610,6 +4335,7 @@ export default function BadmintonRotationApp() {
         setOverrides(data.overrides ?? {});
         setCompletedMatches(data.completedMatches ?? {});
         setFixedCourts(data.fixedCourts ?? {});
+        setBookings(data.bookings ?? []);
         setMatchCourtShuttlecocks(data.matchCourtShuttlecocks ?? {});
         setCustomFees(data.customFees ?? {});
         setPaymentStatuses(data.paymentStatuses ?? {});
@@ -3628,9 +4354,69 @@ export default function BadmintonRotationApp() {
       }
     };
     reader.readAsText(file);
-
-    // Reset input agar bisa memilih file yang sama lagi
     e.target.value = "";
+  }, []);
+
+  // ---- HANDLER BOOKING PERTANDINGAN ----
+  const handleSaveBooking = useCallback((booking: Booking, slot: BookingSlotResult) => {
+    const key = `${slot.matchIndex}_c${slot.courtNumber}`;
+    setFixedCourts((prev) => ({
+      ...prev,
+      [key]: { teamA: slot.teamA, teamB: slot.teamB },
+    }));
+    const updatedBooking: Booking = {
+      ...booking,
+      assigned: { matchIndex: slot.matchIndex, courtNumber: slot.courtNumber },
+    };
+    setBookings((prev) => {
+      const idx = prev.findIndex((b) => b.id === updatedBooking.id);
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = updatedBooking;
+        return copy;
+      }
+      return [...prev, updatedBooking];
+    });
+  }, []);
+
+  const handleDeleteBooking = useCallback((bookingId: string) => {
+    setBookings((prev) => {
+      const b = prev.find((item) => item.id === bookingId);
+      if (b && b.assigned) {
+        const key = `${b.assigned.matchIndex}_c${b.assigned.courtNumber}`;
+        setFixedCourts((prevFc) => {
+          const fc = prevFc[key];
+          if (fc) {
+            const fcPlayers = [...fc.teamA, ...fc.teamB];
+            if (b.playerIds.every((pid) => fcPlayers.includes(pid))) {
+              const copy = { ...prevFc };
+              delete copy[key];
+              return copy;
+            }
+          }
+          return prevFc;
+        });
+      }
+      return prev.filter((item) => item.id !== bookingId);
+    });
+  }, []);
+
+  const handleReSearchBooking = useCallback((booking: Booking) => {
+    if (booking.assigned) {
+      const key = `${booking.assigned.matchIndex}_c${booking.assigned.courtNumber}`;
+      setFixedCourts((prevFc) => {
+        const fc = prevFc[key];
+        if (fc) {
+          const fcPlayers = [...fc.teamA, ...fc.teamB];
+          if (booking.playerIds.every((pid) => fcPlayers.includes(pid))) {
+            const copy = { ...prevFc };
+            delete copy[key];
+            return copy;
+          }
+        }
+        return prevFc;
+      });
+    }
   }, []);
 
   const handleClearAllOverrides = useCallback(() => {
@@ -3946,6 +4732,28 @@ export default function BadmintonRotationApp() {
       fixedCourts
     );
   }, [players, projectedMatchCount, overrides, courtCount, completedMatches, fixedCourts]);
+
+  // Analisis warning pada seluruh proyeksi
+  const warnings = useMemo(() => analyzeProjections(projections, players), [projections, players]);
+  const warningsByMatch = useMemo(() => {
+    const map = new Map<number, ProjectionWarning[]>();
+    for (const w of warnings) {
+      if (!map.has(w.matchIndex)) map.set(w.matchIndex, []);
+      map.get(w.matchIndex)!.push(w);
+    }
+    return map;
+  }, [warnings]);
+  const warningsByMatchCourt = useMemo(() => {
+    const map = new Map<string, ProjectionWarning[]>();
+    for (const w of warnings) {
+      if (w.courtNumber != null) {
+        const key = `${w.matchIndex}_c${w.courtNumber}`;
+        if (!map.has(key)) map.set(key, []);
+        map.get(key)!.push(w);
+      }
+    }
+    return map;
+  }, [warnings]);
 
   // Handler Tombol Checklist Fiks: Kunci formasi lapangan agar tidak berubah otomatis (Requirement 4)
   const handleToggleCourtFixed = useCallback(
@@ -4896,6 +5704,100 @@ export default function BadmintonRotationApp() {
                 <span className="px-2.5 py-1 rounded-lg bg-white/80 border border-slate-300 text-slate-600 font-medium">
                   {projectedMatchCount - stats.completedCount} Belum
                 </span>
+                <div className="relative">
+                  {(() => {
+                    const reds = warnings.filter((w) => w.severity === "red").length;
+                    const yellows = warnings.filter((w) => w.severity === "yellow").length;
+                    if (reds === 0 && yellows === 0) return null;
+                    return (
+                      <div className="flex items-center gap-1.5">
+                        {reds > 0 && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOpenWarningKey((prev) => (prev === "header" ? null : "header"));
+                            }}
+                            className="px-2 py-1 rounded-lg bg-red-100 hover:bg-red-200 border border-red-300 text-red-700 font-semibold cursor-pointer transition active:scale-95"
+                          >
+                            🔴 {reds}
+                          </button>
+                        )}
+                        {yellows > 0 && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOpenWarningKey((prev) => (prev === "header" ? null : "header"));
+                            }}
+                            className="px-2 py-1 rounded-lg bg-amber-100 hover:bg-amber-200 border border-amber-300 text-amber-700 font-semibold cursor-pointer transition active:scale-95"
+                          >
+                            🟡 {yellows}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {openWarningKey === "header" && (
+                    <div
+                      onClick={(e) => e.stopPropagation()}
+                      className="absolute right-0 top-full mt-2 z-50 w-72 max-w-[calc(100vw-2rem)] bg-white border border-slate-300 rounded-xl shadow-xl p-3 text-left animate-in fade-in zoom-in-95 duration-150"
+                    >
+                      <div className="flex items-center justify-between pb-1.5 mb-2 border-b border-slate-200">
+                        <span className="font-bold text-slate-800 text-xs">
+                          Semua Peringatan ({warnings.length})
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setOpenWarningKey(null)}
+                          className="w-5 h-5 flex items-center justify-center rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 text-xs cursor-pointer"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      <div className="max-h-60 overflow-y-auto space-y-2 pr-1 text-xs">
+                        {Array.from(warningsByMatch.entries())
+                          .sort(([a], [b]) => a - b)
+                          .map(([mIdx, mWarnings]) => (
+                            <div key={mIdx} className="space-y-1">
+                              <div className="font-bold text-slate-600 text-[11px] bg-slate-100 px-1.5 py-0.5 rounded">
+                                Match {mIdx}
+                              </div>
+                              {mWarnings.map((w, wIdx) => (
+                                <div
+                                  key={wIdx}
+                                  className={`p-1.5 rounded-md border text-[11px] leading-snug flex items-start gap-1.5 ${
+                                    w.severity === "red"
+                                      ? "bg-red-50 border-red-200 text-red-800"
+                                      : "bg-amber-50 border-amber-200 text-amber-800"
+                                  }`}
+                                >
+                                  <span className="shrink-0">
+                                    {w.severity === "red" ? "🔴" : "🟡"}
+                                  </span>
+                                  <span>{w.message}</span>
+                                </div>
+                              ))}
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setIsBookingModalOpen(true)}
+                  className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold flex items-center gap-1 shadow-sm transition active:scale-95 cursor-pointer"
+                >
+                  <span>📌 Booking</span>
+                  {bookings.length > 0 && (
+                    <span className="ml-0.5 px-1.5 py-0.2 bg-white/20 rounded-full text-[10px]">
+                      {bookings.length}
+                    </span>
+                  )}
+                </button>
               </div>
             </div>
 
@@ -4977,21 +5879,95 @@ export default function BadmintonRotationApp() {
                           >
                             {/* Kolom Match */}
                             <td className="py-3 px-4 text-center">
-                              <button
-                                type="button"
-                                onClick={() => setSelectedMatchIdx(proj.matchIndex)}
-                                className={`inline-flex items-center justify-center gap-1 font-mono font-bold text-xs px-2.5 py-1 rounded-md border transition ${
-                                  isMatchCompleted
-                                    ? "bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200 shadow-sm"
-                                    : "bg-white text-slate-700 border-slate-300 hover:border-slate-400"
-                                }`}
-                                title={`Lihat detail seluruh Match ${proj.matchIndex}`}
-                              >
-                                {isMatchCompleted && (
-                                  <span className="text-emerald-700 text-[11px] font-black leading-none">✓</span>
-                                )}
-                                <span>M{proj.matchIndex}</span>
-                              </button>
+                              <div className="flex flex-col items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedMatchIdx(proj.matchIndex)}
+                                  className={`inline-flex items-center justify-center gap-1 font-mono font-bold text-xs px-2.5 py-1 rounded-md border transition ${
+                                    isMatchCompleted
+                                      ? "bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200 shadow-sm"
+                                      : "bg-white text-slate-700 border-slate-300 hover:border-slate-400"
+                                  }`}
+                                  title={`Lihat detail seluruh Match ${proj.matchIndex}`}
+                                >
+                                  {isMatchCompleted && (
+                                    <span className="text-emerald-700 text-[11px] font-black leading-none">✓</span>
+                                  )}
+                                  <span>M{proj.matchIndex}</span>
+                                </button>
+                                {(() => {
+                                  const mw = warningsByMatch.get(proj.matchIndex) || [];
+                                  const reds = mw.filter((w) => w.severity === "red");
+                                  const yellows = mw.filter((w) => w.severity === "yellow");
+                                  if (reds.length === 0 && yellows.length === 0) return null;
+                                  const mKey = `match_${proj.matchIndex}`;
+                                  return (
+                                    <div className="relative flex items-center justify-center gap-1 text-[10px] font-bold">
+                                      {reds.length > 0 && (
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setOpenWarningKey((prev) => (prev === mKey ? null : mKey));
+                                          }}
+                                          className="px-1 py-0.5 rounded bg-red-100 hover:bg-red-200 text-red-700 border border-red-300 cursor-pointer transition active:scale-95"
+                                        >
+                                          🔴 {reds.length}
+                                        </button>
+                                      )}
+                                      {yellows.length > 0 && (
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setOpenWarningKey((prev) => (prev === mKey ? null : mKey));
+                                          }}
+                                          className="px-1 py-0.5 rounded bg-amber-100 hover:bg-amber-200 text-amber-700 border border-amber-300 cursor-pointer transition active:scale-95"
+                                        >
+                                          🟡 {yellows.length}
+                                        </button>
+                                      )}
+
+                                      {openWarningKey === mKey && (
+                                        <div
+                                          onClick={(e) => e.stopPropagation()}
+                                          className="absolute left-0 top-full mt-1 z-50 w-64 max-w-[calc(100vw-2rem)] bg-white border border-slate-300 rounded-xl shadow-xl p-2.5 text-left animate-in fade-in zoom-in-95 duration-150 font-normal"
+                                        >
+                                          <div className="flex items-center justify-between pb-1 mb-1.5 border-b border-slate-200">
+                                            <span className="font-bold text-slate-800 text-xs">
+                                              Peringatan M{proj.matchIndex} ({mw.length})
+                                            </span>
+                                            <button
+                                              type="button"
+                                              onClick={() => setOpenWarningKey(null)}
+                                              className="w-5 h-5 flex items-center justify-center rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 text-xs cursor-pointer"
+                                            >
+                                              ✕
+                                            </button>
+                                          </div>
+                                          <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1 text-xs">
+                                            {mw.map((w, idx) => (
+                                              <div
+                                                key={idx}
+                                                className={`p-1.5 rounded-md border text-[11px] leading-snug flex items-start gap-1.5 ${
+                                                  w.severity === "red"
+                                                    ? "bg-red-50 border-red-200 text-red-800"
+                                                    : "bg-amber-50 border-amber-200 text-amber-800"
+                                                }`}
+                                              >
+                                                <span className="shrink-0">
+                                                  {w.severity === "red" ? "🔴" : "🟡"}
+                                                </span>
+                                                <span>{w.message}</span>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
+                              </div>
                             </td>
 
                             {/* Kolom Lapangan */}
@@ -5211,6 +6187,88 @@ export default function BadmintonRotationApp() {
                             {/* Kolom Aksi */}
                             <td className="py-3 px-4 text-center">
                               <div className="inline-flex items-center gap-1.5 justify-center">
+                                {(() => {
+                                  const cw = warningsByMatchCourt.get(courtKey) || [];
+                                  // Tampilkan warning tanpa courtNumber pada baris cNum === 1, atau jika pemain terkait DUPLICATE_PLAYER ada di lapangan ini
+                                  const mw = (warningsByMatch.get(proj.matchIndex) || []).filter((w) => {
+                                    if (w.courtNumber != null) return false;
+                                    if (w.code === "DUPLICATE_PLAYER" && courtMatch) {
+                                      const ids = [courtMatch.teamA.player1Id, courtMatch.teamA.player2Id, courtMatch.teamB.player1Id, courtMatch.teamB.player2Id];
+                                      return w.playerIds.some((pid) => ids.includes(pid));
+                                    }
+                                    return cNum === 1;
+                                  });
+                                  const all = [...cw, ...mw];
+                                  const reds = all.filter((w) => w.severity === "red");
+                                  const yellows = all.filter((w) => w.severity === "yellow");
+                                  if (reds.length === 0 && yellows.length === 0) return null;
+
+                                  return (
+                                    <div className="relative inline-flex items-center gap-1">
+                                      {reds.length > 0 && (
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setOpenWarningKey((prev) => (prev === courtKey ? null : courtKey));
+                                          }}
+                                          className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-red-100 hover:bg-red-200 border border-red-300 text-[10px] font-bold text-red-700 cursor-pointer transition active:scale-95"
+                                        >
+                                          🔴
+                                        </button>
+                                      )}
+                                      {yellows.length > 0 && (
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setOpenWarningKey((prev) => (prev === courtKey ? null : courtKey));
+                                          }}
+                                          className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-amber-100 hover:bg-amber-200 border border-amber-300 text-[10px] font-bold text-amber-700 cursor-pointer transition active:scale-95"
+                                        >
+                                          🟡
+                                        </button>
+                                      )}
+
+                                      {openWarningKey === courtKey && (
+                                        <div
+                                          onClick={(e) => e.stopPropagation()}
+                                          className="absolute right-0 top-full mt-1.5 z-50 w-64 max-w-[calc(100vw-2rem)] bg-white border border-slate-300 rounded-xl shadow-xl p-2.5 text-left animate-in fade-in zoom-in-95 duration-150"
+                                        >
+                                          <div className="flex items-center justify-between pb-1 mb-1.5 border-b border-slate-200">
+                                            <span className="font-bold text-slate-800 text-xs">
+                                              Peringatan ({all.length})
+                                            </span>
+                                            <button
+                                              type="button"
+                                              onClick={() => setOpenWarningKey(null)}
+                                              className="w-5 h-5 flex items-center justify-center rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 text-xs cursor-pointer"
+                                            >
+                                              ✕
+                                            </button>
+                                          </div>
+                                          <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1 text-xs">
+                                            {all.map((w, idx) => (
+                                              <div
+                                                key={idx}
+                                                className={`p-1.5 rounded-md border text-[11px] leading-snug flex items-start gap-1.5 ${
+                                                  w.severity === "red"
+                                                    ? "bg-red-50 border-red-200 text-red-800"
+                                                    : "bg-amber-50 border-amber-200 text-amber-800"
+                                                }`}
+                                              >
+                                                <span className="shrink-0">
+                                                  {w.severity === "red" ? "🔴" : "🟡"}
+                                                </span>
+                                                <span>{w.message}</span>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
                                 <button
                                   type="button"
                                   onClick={() =>
@@ -5361,6 +6419,22 @@ export default function BadmintonRotationApp() {
                               </span>
                             )}
                           </div>
+                          {(() => {
+                            const mw = warningsByMatch.get(proj.matchIndex) || [];
+                            const reds = mw.filter((w) => w.severity === "red");
+                            const yellows = mw.filter((w) => w.severity === "yellow");
+                            if (reds.length === 0 && yellows.length === 0) return null;
+                            return (
+                              <div className="flex items-center justify-center gap-1 text-[9px] font-bold">
+                                {reds.length > 0 && (
+                                  <span className="px-1 rounded bg-red-100 text-red-700 border border-red-200">🔴 {reds.length}</span>
+                                )}
+                                {yellows.length > 0 && (
+                                  <span className="px-1 rounded bg-amber-100 text-amber-700 border border-amber-200">🟡 {yellows.length}</span>
+                                )}
+                              </div>
+                            );
+                          })()}
                           <span className="text-[10px] text-slate-500 group-hover:text-slate-600">
                             {isCompleted
                               ? "Selesai"
@@ -6111,6 +7185,24 @@ export default function BadmintonRotationApp() {
         cashPaidCount={stats.cashPaidCount}
         totalPaidCount={stats.totalPaidCount}
         regularPresent={stats.regularPresent}
+      />
+
+      {/* =====================================================================
+          MODAL BOOKING PERTANDINGAN
+      ====================================================================== */}
+      <BookingModal
+        isOpen={isBookingModalOpen}
+        onClose={() => setIsBookingModalOpen(false)}
+        players={players}
+        courtCount={courtCount}
+        projectedMatchCount={projectedMatchCount}
+        overrides={overrides}
+        completedMatches={completedMatches}
+        fixedCourts={fixedCourts}
+        bookings={bookings}
+        onSaveBooking={handleSaveBooking}
+        onDeleteBooking={handleDeleteBooking}
+        onReSearchBooking={handleReSearchBooking}
       />
 
       {/* =====================================================================
